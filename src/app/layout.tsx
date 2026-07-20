@@ -39,7 +39,8 @@ export const metadata: Metadata = {
   creator: "Wedabime Pramukayo",
   publisher: "Wedabime Pramukayo",
   icons: {
-    icon: "/logo.svg",
+    icon: "/logo.png",
+    apple: "/logo.png",
   },
   openGraph: {
     type: "website",
