@@ -1,0 +1,131 @@
+// Wedabime Pramukayo CMS - Database Schema
+// Edge-compatible with SQLite (dev) / Neon Serverless Postgres (prod)
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// ─── ADMIN USERS ───────────────────────────────────────────────
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  name          String?
+  passwordHash  String    // bcrypt hashed password
+  role          String    @default("admin") // admin, editor
+  isActive      Boolean   @default(true)
+  lastLoginAt   DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+}
+
+// ─── PAGES (Dynamic Content Management) ────────────────────────
+model Page {
+  id            String    @id @default(cuid())
+  slug          String    @unique // e.g. "home", "about", "services", "advantages"
+  title         String
+  heroTitle     String?   // Hero section heading
+  heroSubtitle  String?   // Hero section subtext
+  heroImageUrl  String?   // Hero background image URL
+  content       String    // Main body content (rich text / HTML)
+  metaTitle     String?   // SEO title
+  metaDesc      String?   // SEO description
+  metaKeywords  String?   // SEO keywords (comma-separated)
+  ogImageUrl    String?   // Open Graph image
+  isPublished   Boolean   @default(true)
+  publishedAt   DateTime?
+  sortOrder     Int       @default(0)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+}
+
+// ─── PRODUCT CATEGORIES ────────────────────────────────────────
+model ProductCategory {
+  id          String    @id @default(cuid())
+  slug        String    @unique // e.g. "heavy-flat-series", "designer-profile-series"
+  name        String
+  description String?
+  icon        String?   // Icon name from Lucide
+  imageUrl    String?   // Category image
+  sortOrder   Int       @default(0)
+  isActive    Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  products    Product[]
+}
+
+// ─── PRODUCTS / SERVICES ───────────────────────────────────────
+model Product {
+  id           String          @id @default(cuid())
+  slug         String          @unique
+  name         String
+  subtitle     String?
+  description  String          // Main product description (rich text / HTML)
+  features     String          // Key features as JSON array string
+  advantages   String?         // Product-specific advantages (JSON array)
+  specifications String?       // Technical specs as JSON string
+  mainImageUrl String?         // Primary product image
+  gallery      String?         // Additional images as JSON array of URLs
+  categoryId   String?
+  category     ProductCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  metaTitle    String?
+  metaDesc     String?
+  metaKeywords String?
+  ogImageUrl   String?
+  isFeatured   Boolean         @default(false)
+  isPublished  Boolean         @default(true)
+  publishedAt  DateTime?
+  sortOrder    Int             @default(0)
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
+}
+
+// ─── BLOG POSTS ────────────────────────────────────────────────
+model BlogPost {
+  id           String    @id @default(cuid())
+  slug         String    @unique
+  title        String
+  excerpt      String?   // Short summary for listings
+  content      String    // Full blog post content (rich text / HTML)
+  coverImageUrl String?  // Featured image
+  author       String?   // Author name
+  tags         String?   // Tags as JSON array string
+  metaTitle    String?
+  metaDesc     String?
+  metaKeywords String?
+  ogImageUrl   String?
+  isPublished  Boolean   @default(false)
+  publishedAt  DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+}
+
+// ─── SITE SETTINGS (Global Config) ─────────────────────────────
+model SiteSetting {
+  id          String    @id @default(cuid())
+  key         String    @unique // e.g. "site_name", "meta_description", "primary_color"
+  value       String    // Stored as string; parse as needed (JSON for objects)
+  category    String    @default("general") // general, seo, theme, contact, social
+  description String?   // Human-readable description for the admin UI
+  isPublic    Boolean   @default(true) // Whether this setting is safe to expose on frontend
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+}
+
+// ─── SITE IMAGES / MEDIA ───────────────────────────────────────
+model Media {
+  id          String    @id @default(cuid())
+  url         String    // Full URL or path to image
+  altText     String?
+  filename    String?   // Original filename
+  mimeType    String?   // image/jpeg, image/png, etc.
+  fileSize    Int?      // Size in bytes
+  width       Int?
+  height      Int?
+  uploadedBy  String?   // User ID
+  createdAt   DateTime  @default(now())
+}
