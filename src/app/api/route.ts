@@ -6,6 +6,9 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 
+// Force dynamic rendering — no prerendering at build time
+export const dynamic = 'force-dynamic';
+
 export async function GET() {
   try {
     // Test database connectivity

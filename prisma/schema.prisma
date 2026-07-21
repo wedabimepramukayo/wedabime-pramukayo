@@ -1,5 +1,5 @@
 // Wedabime Pramukayo CMS - Database Schema
-// SQLite for development — PostgreSQL-compatible for Neon deployment
+// PostgreSQL for production (Neon) — development can use local PostgreSQL or Neon
 // Cloudinary for image storage (only URLs stored in DB)
 
 generator client {
@@ -7,7 +7,7 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 

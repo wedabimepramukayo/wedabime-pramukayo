@@ -7,7 +7,8 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 
-export const revalidate = 300; // Cache for 5 minutes
+// Force dynamic rendering — no prerendering at build time (DATABASE_URL may not be available)
+export const dynamic = 'force-dynamic';
 
 export async function GET() {
   try {
