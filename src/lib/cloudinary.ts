@@ -1,20 +1,15 @@
 /**
  * Cloudinary Upload Utility — Wedabime Pramukayo CMS
- * Handles image uploads to Cloudinary, returning URLs for lightweight DB storage
- * Only image URLs are stored in the database — no binary data
+ * Edge-compatible: Uses fetch-based upload instead of Node.js streams
+ * Works on Cloudflare Workers/Pages (V8 runtime)
+ *
+ * Only image URLs are stored in the database — no binary data.
  */
 
-import { v2 as cloudinary, UploadApiResponse, UploadApiOptions } from "cloudinary";
-
-// Configure Cloudinary from environment
-cloudinary.config({
-  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
-  api_key: process.env.CLOUDINARY_API_KEY,
-  api_secret: process.env.CLOUDINARY_API_SECRET,
-  secure: true,
-});
-
-const UPLOAD_FOLDER = process.env.CLOUDINARY_UPLOAD_FOLDER || "wedabime-pramukayo";
+const CLOUD_NAME = () => process.env.CLOUDINARY_CLOUD_NAME!;
+const API_KEY = () => process.env.CLOUDINARY_API_KEY!;
+const API_SECRET = () => process.env.CLOUDINARY_API_SECRET!;
+const UPLOAD_FOLDER = () => process.env.CLOUDINARY_UPLOAD_FOLDER || "wedabime-pramukayo";
 
 export interface CloudinaryUploadResult {
   url: string;            // Full Cloudinary URL
@@ -29,92 +24,151 @@ export interface CloudinaryUploadResult {
 }
 
 /**
- * Upload a file buffer to Cloudinary
- * @param buffer - The file buffer to upload
+ * Generate Cloudinary API signature for authenticated upload
+ * Uses Web Crypto API (Edge-compatible) instead of Node.js crypto
+ */
+async function generateSignature(paramsToSign: Record<string, string>): Promise<string> {
+  // Sort parameters alphabetically and create string to sign
+  const sortedKeys = Object.keys(paramsToSign).sort();
+  const stringToSign = sortedKeys
+    .map((key) => `${key}=${paramsToSign[key]}`)
+    .join("&");
+
+  // Append API secret
+  const stringToSignWithSecret = stringToSign + API_SECRET();
+
+  // SHA-1 hash using Web Crypto API (Edge-compatible)
+  const encoder = new TextEncoder();
+  const data = encoder.encode(stringToSignWithSecret);
+  const hashBuffer = await crypto.subtle.digest("SHA-1", data);
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  const signature = hashArray
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
+
+  return signature;
+}
+
+/**
+ * Upload a file to Cloudinary using fetch API (Edge-compatible)
+ * Replaces the Node.js stream-based upload approach
+ *
+ * @param fileData - ArrayBuffer of the file to upload
  * @param filename - Original filename for reference
  * @param mimeType - MIME type of the file
  * @param options - Additional Cloudinary upload options
  */
 export async function uploadToCloudinary(
-  buffer: Buffer,
+  fileData: ArrayBuffer,
   filename: string,
   mimeType: string,
-  options?: Partial<UploadApiOptions>
+  options?: {
+    folder?: string;
+    publicId?: string;
+    tags?: string[];
+  }
 ): Promise<CloudinaryUploadResult> {
   const timestamp = Date.now();
   const randomStr = Math.random().toString(36).substring(2, 8);
   const ext = filename.split(".").pop() || "jpg";
-  const publicId = `${UPLOAD_FOLDER}/${timestamp}-${randomStr}`;
+  const folder = options?.folder || UPLOAD_FOLDER();
+  const publicId = options?.publicId || `${folder}/${timestamp}-${randomStr}`;
 
-  return new Promise((resolve, reject) => {
-    const uploadStream = cloudinary.uploader.upload_stream(
-      {
-        public_id: publicId,
-        folder: UPLOAD_FOLDER,
-        resource_type: "image",
-        overwrite: false,
-        // Image optimization
-        quality: "auto:good",
-        fetch_format: "auto",
-        // Responsive breakpoints for different device sizes
-        responsive_breakpoints: [
-          {
-            create_derived: true,
-            bytes_step: 20000,
-            min_width: 200,
-            max_width: 1200,
-            max_images: 3,
-          },
-        ],
-        // Add context metadata
-        context: {
-          original_filename: filename,
-        },
-        // Tags for organization
-        tags: [UPLOAD_FOLDER, "cms-upload"],
-        ...options,
-      },
-      (error, result: UploadApiResponse | undefined) => {
-        if (error) {
-          reject(new Error(`Cloudinary upload failed: ${error.message}`));
-          return;
-        }
+  // Build parameters for signed upload
+  const params: Record<string, string> = {
+    public_id: publicId,
+    folder: folder,
+    resource_type: "image",
+    overwrite: "false",
+    timestamp: Math.floor(timestamp / 1000).toString(),
+    // Image optimization
+    quality: "auto:good",
+    fetch_format: "auto",
+    // Add context metadata
+    context: `original_filename=${filename}`,
+    // Tags for organization
+    tags: [folder, "cms-upload", ...(options?.tags || [])].join(","),
+  };
 
-        if (!result) {
-          reject(new Error("Cloudinary upload returned no result"));
-          return;
-        }
+  // Generate signature
+  const signature = await generateSignature(params);
 
-        resolve({
-          url: result.url,
-          secureUrl: result.secure_url,
-          cloudinaryId: result.public_id,
-          width: result.width,
-          height: result.height,
-          format: result.format,
-          fileSize: result.bytes,
-          mimeType: `image/${result.format}`,
-          folder: result.folder || UPLOAD_FOLDER,
-        });
-      }
-    );
+  // Build FormData for upload
+  const formData = new FormData();
+  formData.append("file", new Blob([fileData], { type: mimeType }), filename);
+  formData.append("api_key", API_KEY());
+  formData.append("signature", signature);
 
-    // Write buffer to the upload stream
-    uploadStream.write(buffer);
-    uploadStream.end();
+  // Append all params
+  for (const [key, value] of Object.entries(params)) {
+    formData.append(key, value);
+  }
+
+  // Upload via fetch (Edge-compatible)
+  const uploadUrl = `https://api.cloudinary.com/v1_1/${CLOUD_NAME()}/image/upload`;
+  const response = await fetch(uploadUrl, {
+    method: "POST",
+    body: formData,
   });
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    const message = (errorData as any).error?.message || response.statusText;
+    throw new Error(`Cloudinary upload failed: ${message}`);
+  }
+
+  const result = await response.json();
+
+  return {
+    url: result.url,
+    secureUrl: result.secure_url,
+    cloudinaryId: result.public_id,
+    width: result.width,
+    height: result.height,
+    format: result.format,
+    fileSize: result.bytes,
+    mimeType: `image/${result.format}`,
+    folder: result.folder || folder,
+  };
 }
 
 /**
  * Delete an image from Cloudinary by its public_id
- * @param cloudinaryId - The public_id of the image to delete
+ * Uses signed fetch request (Edge-compatible)
  */
 export async function deleteFromCloudinary(cloudinaryId: string): Promise<boolean> {
   try {
-    const result = await cloudinary.uploader.destroy(cloudinaryId, {
+    const timestamp = Math.floor(Date.now() / 1000).toString();
+
+    const params: Record<string, string> = {
+      public_id: cloudinaryId,
       resource_type: "image",
-      invalidate: true,
+      invalidate: "true",
+      timestamp,
+    };
+
+    const signature = await generateSignature(params);
+
+    const formData = new FormData();
+    formData.append("public_id", cloudinaryId);
+    formData.append("resource_type", "image");
+    formData.append("invalidate", "true");
+    formData.append("timestamp", timestamp);
+    formData.append("api_key", API_KEY());
+    formData.append("signature", signature);
+
+    const destroyUrl = `https://api.cloudinary.com/v1_1/${CLOUD_NAME()}/image/destroy`;
+    const response = await fetch(destroyUrl, {
+      method: "POST",
+      body: formData,
     });
+
+    if (!response.ok) {
+      console.error("Cloudinary delete failed:", response.status, response.statusText);
+      return false;
+    }
+
+    const result = await response.json();
     return result.result === "ok" || result.result === "not found";
   } catch (error) {
     console.error("Cloudinary delete error:", error);
@@ -125,8 +179,6 @@ export async function deleteFromCloudinary(cloudinaryId: string): Promise<boolea
 /**
  * Generate a Cloudinary transformation URL
  * Useful for generating thumbnails, optimized sizes, etc.
- * @param cloudinaryId - The public_id of the image
- * @param options - Transformation options
  */
 export function getTransformationUrl(
   cloudinaryId: string,
@@ -138,18 +190,16 @@ export function getTransformationUrl(
     format?: string;
   } = {}
 ): string {
-  return cloudinary.url(cloudinaryId, {
-    secure: true,
-    transformation: [
-      {
-        width: options.width,
-        height: options.height,
-        crop: options.crop || "fill",
-        quality: options.quality || "auto:good",
-        fetch_format: options.format || "auto",
-      },
-    ],
-  });
+  const cloudName = CLOUD_NAME();
+  const transforms = [];
+
+  if (options.width) transforms.push(`w_${options.width}`);
+  if (options.height) transforms.push(`h_${options.height}`);
+  transforms.push(`c_${options.crop || "fill"}`);
+  transforms.push(`q_${options.quality || "auto:good"}`);
+  transforms.push(`f_${options.format || "auto"}`);
+
+  return `https://res.cloudinary.com/${cloudName}/image/upload/${transforms.join(",")}/${cloudinaryId}`;
 }
 
 /**
@@ -175,5 +225,3 @@ export function isCloudinaryConfigured(): boolean {
     process.env.CLOUDINARY_API_SECRET
   );
 }
-
-export { cloudinary };

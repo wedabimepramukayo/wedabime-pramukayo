@@ -7,5 +7,15 @@
   ],
   "observability": {
     "enabled": true
-  }
+  },
+  // Environment variables are set via Cloudflare Pages dashboard
+  // Do NOT put secrets here — use wrangler secret or the dashboard
+  // Required env vars:
+  //   DATABASE_URL          — Neon PostgreSQL connection string
+  //   AUTH_SECRET           — NextAuth secret
+  //   NEXTAUTH_URL          — Public URL of the deployed site
+  //   CLOUDINARY_CLOUD_NAME — Cloudinary cloud name
+  //   CLOUDINARY_API_KEY    — Cloudinary API key
+  //   CLOUDINARY_API_SECRET — Cloudinary API secret
+  //   CLOUDINARY_UPLOAD_FOLDER — Upload folder name (default: wedabime-pramukayo)
 }
