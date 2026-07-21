@@ -30,8 +30,16 @@ yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 
-# env files (can opt-in for committing if needed)
+# env files (NEVER commit — contains Cloudinary & auth secrets)
 .env*
+!.env.example
+
+# database files — use migrations, not binary data
+db/*.db
+db/*.db-journal
+
+# sandbox/z-ai scripts (not part of the project)
+.zscripts/
 
 # vercel
 .vercel
