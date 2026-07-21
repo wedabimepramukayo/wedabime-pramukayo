@@ -55,7 +55,7 @@ export default async function Home() {
             <div className="text-xs text-brand-sage/70">Home, About, Services, Advantages</div>
           </div>
           <div className="rounded-xl border border-brand-emerald/30 bg-brand-dark/50 backdrop-blur p-5 text-left space-y-2">
-            <div className="text-sm text-brand-sage font-medium">Products</div>
+            <div className="text-sm text-brand-sage font-medium">Services</div>
             <div className="text-3xl font-bold text-brand-emerald">{productCount}</div>
             <div className="text-xs text-brand-sage/70">i-Panel Series & Categories</div>
           </div>

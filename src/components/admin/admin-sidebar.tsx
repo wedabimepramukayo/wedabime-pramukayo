@@ -37,7 +37,7 @@ const menuItems = [
     description: "Manage Content",
   },
   {
-    label: "Products",
+    label: "Services",
     href: "/admin/products",
     icon: Package,
     description: "i-Panel & Services",
@@ -46,7 +46,7 @@ const menuItems = [
     label: "Categories",
     href: "/admin/categories",
     icon: FolderOpen,
-    description: "Product Categories",
+    description: "Service Categories",
   },
   {
     label: "Blog",

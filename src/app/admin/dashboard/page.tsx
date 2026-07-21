@@ -30,14 +30,14 @@ export default async function AdminDashboard() {
   // Fetch dashboard stats
   const [
     pageCount,
-    productCount,
+    serviceCount,
     categoryCount,
     blogCount,
     settingsCount,
     publishedPages,
-    publishedProducts,
+    publishedServices,
     publishedPosts,
-    recentProducts,
+    recentServices,
     recentPosts,
   ] = await Promise.all([
     db.page.count(),
@@ -71,9 +71,9 @@ export default async function AdminDashboard() {
       bg: "bg-brand-primary/10",
     },
     {
-      title: "Products",
-      value: productCount,
-      published: publishedProducts,
+      title: "Services",
+      value: serviceCount,
+      published: publishedServices,
       icon: Package,
       href: "/admin/products",
       color: "text-brand-emerald",
@@ -118,7 +118,7 @@ export default async function AdminDashboard() {
                 Welcome back, {session.user?.name || "Admin"} 👋
               </h1>
               <p className="text-brand-sage/80 mt-2 max-w-lg">
-                Manage your Wedabime Pramukayo website content, products, and settings from this dashboard.
+                Manage your Wedabime Pramukayo website content, services, and settings from this dashboard.
               </p>
             </div>
             <div className="hidden md:flex items-center gap-3">
@@ -151,16 +151,16 @@ export default async function AdminDashboard() {
             <div className="bg-white/10 backdrop-blur rounded-xl p-4">
               <div className="flex items-center gap-2 text-brand-gold mb-1">
                 <Award className="h-4 w-4" />
-                <span className="text-xs font-medium">Products</span>
+                <span className="text-xs font-medium">Services</span>
               </div>
-              <div className="text-2xl font-bold">{productCount}</div>
+              <div className="text-2xl font-bold">{serviceCount}</div>
             </div>
             <div className="bg-white/10 backdrop-blur rounded-xl p-4">
               <div className="flex items-center gap-2 text-brand-lime mb-1">
                 <TrendingUp className="h-4 w-4" />
                 <span className="text-xs font-medium">Published</span>
               </div>
-              <div className="text-2xl font-bold">{publishedProducts}</div>
+              <div className="text-2xl font-bold">{publishedServices}</div>
             </div>
           </div>
         </div>
@@ -196,10 +196,10 @@ export default async function AdminDashboard() {
 
       {/* Recent Activity */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Recent Products */}
+        {/* Recent Projects */}
         <div className="rounded-xl border border-brand-emerald/10 bg-white p-6">
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-semibold text-foreground">Recent Products</h2>
+            <h2 className="text-lg font-semibold text-foreground">Recent Projects</h2>
             <Link
               href="/admin/products"
               className="text-sm text-brand-primary hover:text-brand-emerald flex items-center gap-1 transition-colors"
@@ -208,31 +208,31 @@ export default async function AdminDashboard() {
             </Link>
           </div>
           <div className="space-y-3">
-            {recentProducts.length === 0 ? (
-              <p className="text-sm text-muted-foreground py-4 text-center">No products yet</p>
+            {recentServices.length === 0 ? (
+              <p className="text-sm text-muted-foreground py-4 text-center">No services yet</p>
             ) : (
-              recentProducts.map((product) => (
+              recentServices.map((service) => (
                 <div
-                  key={product.id}
+                  key={service.id}
                   className="flex items-center justify-between p-3 rounded-lg bg-brand-mint/20 hover:bg-brand-mint/30 transition-colors"
                 >
                   <div className="min-w-0">
                     <div className="text-sm font-medium text-foreground truncate">
-                      {product.name}
+                      {service.name}
                     </div>
                     <div className="text-xs text-muted-foreground">
-                      {product.category?.name || "Uncategorized"}
+                      {service.category?.name || "Uncategorized"}
                     </div>
                   </div>
                   <div className="flex items-center gap-2 flex-shrink-0">
-                    {product.isFeatured && (
+                    {service.isFeatured && (
                       <span className="text-[10px] px-2 py-0.5 rounded-full bg-brand-gold/20 text-brand-gold font-medium">
                         Featured
                       </span>
                     )}
                     <span className="text-[10px] text-muted-foreground flex items-center gap-1">
                       <Clock className="h-3 w-3" />
-                      {new Date(product.updatedAt).toLocaleDateString()}
+                      {new Date(service.updatedAt).toLocaleDateString()}
                     </span>
                   </div>
                 </div>
@@ -307,7 +307,7 @@ export default async function AdminDashboard() {
             className="flex items-center gap-3 p-4 rounded-lg border border-brand-emerald/10 hover:border-brand-emerald/30 hover:bg-brand-mint/20 transition-all"
           >
             <Package className="h-5 w-5 text-brand-emerald" />
-            <span className="text-sm font-medium text-foreground">Manage Products</span>
+            <span className="text-sm font-medium text-foreground">Manage Services</span>
           </Link>
           <Link
             href="/admin/blog"

@@ -44,7 +44,7 @@ export function AdminHeader({ user }: AdminHeaderProps) {
           <div className="relative max-w-md w-full">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
-              placeholder="Search pages, products, posts..."
+              placeholder="Search pages, services, posts..."
               className="pl-9 bg-brand-mint/30 border-brand-emerald/10 focus:border-brand-emerald/30 focus:ring-brand-emerald/20"
             />
           </div>

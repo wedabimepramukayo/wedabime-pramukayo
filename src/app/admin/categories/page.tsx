@@ -16,7 +16,7 @@ export default async function AdminCategories() {
         <div>
           <h1 className="text-2xl font-bold text-foreground">Category Manager</h1>
           <p className="text-sm text-muted-foreground mt-1">
-            Organize products into categories
+            Organize services into categories
           </p>
         </div>
       </div>
@@ -33,7 +33,7 @@ export default async function AdminCategories() {
             <div key={cat.id} className="flex items-center justify-between p-4 hover:bg-brand-mint/10 transition-colors">
               <div className="min-w-0">
                 <div className="font-medium text-foreground">{cat.name}</div>
-                <div className="text-xs text-muted-foreground">/{cat.slug} • {cat._count.products} products</div>
+                <div className="text-xs text-muted-foreground">/{cat.slug} • {cat._count.products} services</div>
               </div>
               <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${
                 cat.isActive
