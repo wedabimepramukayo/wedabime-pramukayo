@@ -20,6 +20,9 @@ node_modules
 # opennext cloudflare build output
 .open-next/
 
+# wrangler local state
+.wrangler/
+
 # production
 /build
 
