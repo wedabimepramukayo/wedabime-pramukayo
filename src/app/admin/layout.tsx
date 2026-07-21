@@ -5,6 +5,9 @@
  * for authenticated users. Login page is excluded via route groups.
  */
 
+// Force dynamic rendering — layout uses getServerSession which needs auth DB
+export const dynamic = 'force-dynamic';
+
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { redirect } from "next/navigation";

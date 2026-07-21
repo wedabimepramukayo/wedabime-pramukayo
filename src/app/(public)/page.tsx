@@ -3,6 +3,9 @@
  * Dynamic homepage with hero, featured services, advantages, and CTA
  */
 
+// Force dynamic rendering — page queries database at request time
+export const dynamic = 'force-dynamic';
+
 import { db } from "@/lib/db";
 import Image from "next/image";
 import Link from "next/link";

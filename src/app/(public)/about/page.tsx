@@ -3,6 +3,9 @@
  * Dynamic page content from CMS with vision, mission, and company info
  */
 
+// Force dynamic rendering — page queries database at request time
+export const dynamic = 'force-dynamic';
+
 import { db } from "@/lib/db";
 import Link from "next/link";
 import { ArrowRight, Eye, Target, Heart, Zap, TreePine, Shield, Users } from "lucide-react";

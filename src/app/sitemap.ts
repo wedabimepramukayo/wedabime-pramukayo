@@ -4,6 +4,9 @@
  * Follows Next.js sitemap.ts convention
  */
 
+// Force dynamic rendering — sitemap queries database at request time
+export const dynamic = 'force-dynamic';
+
 import { db } from "@/lib/db";
 import type { MetadataRoute } from "next";
 

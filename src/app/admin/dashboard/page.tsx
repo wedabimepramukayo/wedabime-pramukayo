@@ -3,6 +3,9 @@
  * Overview page with key metrics, recent activity, and quick actions
  */
 
+// Force dynamic rendering — dashboard queries database at request time
+export const dynamic = 'force-dynamic';
+
 import { db } from "@/lib/db";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";

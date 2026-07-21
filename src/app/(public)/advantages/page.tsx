@@ -3,6 +3,9 @@
  * Dynamic page content showing i-Panel benefits (Waasi)
  */
 
+// Force dynamic rendering — page queries database at request time
+export const dynamic = 'force-dynamic';
+
 import { db } from "@/lib/db";
 import Link from "next/link";
 import { ArrowRight, Droplets, Flame, Bug, Wrench, Shield, TreePine, Clock, Award, ThumbsUp } from "lucide-react";

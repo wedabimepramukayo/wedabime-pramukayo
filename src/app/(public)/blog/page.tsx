@@ -3,6 +3,9 @@
  * Shows published blog posts with tags and excerpts
  */
 
+// Force dynamic rendering — page queries database at request time
+export const dynamic = 'force-dynamic';
+
 import { db } from "@/lib/db";
 import Link from "next/link";
 import { Calendar, User, ArrowRight, Tag, NotebookPen } from "lucide-react";

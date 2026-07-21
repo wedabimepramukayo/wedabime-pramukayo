@@ -3,6 +3,9 @@
  * Shows all services with category filtering
  */
 
+// Force dynamic rendering — page queries database at request time
+export const dynamic = 'force-dynamic';
+
 import { db } from "@/lib/db";
 import Link from "next/link";
 import { ArrowRight, CheckCircle, Star, Filter } from "lucide-react";
