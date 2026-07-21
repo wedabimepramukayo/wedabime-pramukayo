@@ -1,15 +1,23 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
+  "main": ".open-next/worker.js",
   "name": "wedabime-pramukayo",
-  "compatibility_date": "2026-07-22",
-  "compatibility_flags": [
-    "nodejs_compat"
-  ],
-  "observability": {
-    "enabled": true
+  "compatibility_date": "2026-07-21",
+  "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
+  "assets": {
+    "directory": ".open-next/assets",
+    "binding": "ASSETS"
   },
-  // Environment variables are set via Cloudflare Pages dashboard
-  // Do NOT put secrets here — use wrangler secret or the dashboard
+  "services": [
+    {
+      "binding": "WORKER_SELF_REFERENCE",
+      "service": "wedabime-pramukayo"
+    }
+  ],
+  "images": {
+    "binding": "IMAGES"
+  }
+  // Environment variables are set via Cloudflare Dashboard or wrangler secret
   // Required env vars:
   //   DATABASE_URL          — Neon PostgreSQL connection string
   //   AUTH_SECRET           — NextAuth secret
@@ -18,4 +26,7 @@
   //   CLOUDINARY_API_KEY    — Cloudinary API key
   //   CLOUDINARY_API_SECRET — Cloudinary API secret
   //   CLOUDINARY_UPLOAD_FOLDER — Upload folder name (default: wedabime-pramukayo)
+  //
+  // Set secrets via: wrangler secret put DATABASE_URL
+  // Or via Cloudflare Dashboard → Workers → wedabime-pramukayo → Settings → Variables
 }
