@@ -60,3 +60,15 @@ prompt
 server.log
 # Skills directory
 /skills/
+
+# tool results (scratch data)
+/tool-results/
+
+# upload directory (legacy/temp)
+/upload/
+
+# worklog (internal dev log)
+/worklog.md
+
+# branding JSON (scratch data)
+branding_*.json
