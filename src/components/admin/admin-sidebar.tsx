@@ -19,6 +19,7 @@ import {
   ChevronLeft,
   TreePine,
   Inbox,
+  ImageIcon,
 } from "lucide-react";
 import { useState } from "react";
 import { signOut } from "next-auth/react";
@@ -54,6 +55,12 @@ const menuItems = [
     href: "/admin/blog",
     icon: NotebookPen,
     description: "Blog Posts",
+  },
+  {
+    label: "Media",
+    href: "/admin/media",
+    icon: ImageIcon,
+    description: "Image Library",
   },
   {
     label: "Messages",

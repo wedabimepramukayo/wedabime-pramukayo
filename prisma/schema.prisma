@@ -1,5 +1,6 @@
 // Wedabime Pramukayo CMS - Database Schema
-// Edge-compatible with SQLite (dev) / Neon Serverless Postgres (prod)
+// SQLite for development — PostgreSQL-compatible for Neon deployment
+// Cloudinary for image storage (only URLs stored in DB)
 
 generator client {
   provider = "prisma-client-js"
@@ -116,18 +117,20 @@ model SiteSetting {
   updatedAt   DateTime  @updatedAt
 }
 
-// ─── SITE IMAGES / MEDIA ───────────────────────────────────────
+// ─── SITE IMAGES / MEDIA (Cloudinary URLs only — lightweight DB) ─
 model Media {
-  id          String    @id @default(cuid())
-  url         String    // Full URL or path to image
-  altText     String?
-  filename    String?   // Original filename
-  mimeType    String?   // image/jpeg, image/png, etc.
-  fileSize    Int?      // Size in bytes
-  width       Int?
-  height      Int?
-  uploadedBy  String?   // User ID
-  createdAt   DateTime  @default(now())
+  id            String    @id @default(cuid())
+  url           String    // Cloudinary full URL (only URL stored in DB)
+  cloudinaryId  String?   // Cloudinary public_id for deletion/management
+  altText       String?
+  filename      String?   // Original filename
+  mimeType      String?   // image/jpeg, image/png, etc.
+  fileSize      Int?      // Size in bytes
+  width         Int?
+  height        Int?
+  folder        String?   // Cloudinary folder name
+  uploadedBy    String?   // User ID
+  createdAt     DateTime  @default(now())
 }
 
 // ─── CONTACT FORM SUBMISSIONS ──────────────────────────────────

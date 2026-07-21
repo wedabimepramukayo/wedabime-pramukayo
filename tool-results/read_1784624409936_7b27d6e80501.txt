@@ -1,0 +1,803 @@
+     1→"use client";
+     2→
+     3→/**
+     4→ * Admin Media Manager — Cloudinary-powered image gallery
+     5→ * Wedabime Pramukayo CMS
+     6→ *
+     7→ * Features:
+     8→ * - Grid/list view toggle for browsing uploaded images
+     9→ * - Upload new images to Cloudinary via drag & drop or file picker
+    10→ * - Search and filter by filename, folder
+    11→ * - Copy URL to clipboard for use in CMS content
+    12→ * - Delete images (removes from Cloudinary + DB)
+    13→ * - Image preview with details panel
+    14→ * - Pagination for large libraries
+    15→ */
+    16→
+    17→import { useState, useEffect, useCallback, useRef } from "react";
+    18→import Image from "next/image";
+    19→import { Button } from "@/components/ui/button";
+    20→import { Input } from "@/components/ui/input";
+    21→import { Badge } from "@/components/ui/badge";
+    22→import { Skeleton } from "@/components/ui/skeleton";
+    23→import {
+    24→  Dialog,
+    25→  DialogContent,
+    26→  DialogHeader,
+    27→  DialogTitle,
+    28→  DialogFooter,
+    29→  DialogDescription,
+    30→} from "@/components/ui/dialog";
+    31→import {
+    32→  AlertDialog,
+    33→  AlertDialogAction,
+    34→  AlertDialogCancel,
+    35→  AlertDialogContent,
+    36→  AlertDialogDescription,
+    37→  AlertDialogFooter,
+    38→  AlertDialogHeader,
+    39→  AlertDialogTitle,
+    40→} from "@/components/ui/alert-dialog";
+    41→import {
+    42→  DropdownMenu,
+    43→  DropdownMenuContent,
+    44→  DropdownMenuItem,
+    45→  DropdownMenuTrigger,
+    46→} from "@/components/ui/dropdown-menu";
+    47→import {
+    48→  Upload,
+    49→  Search,
+    50→  Grid3X3,
+    51→  List,
+    52→  Trash2,
+    53→  Copy,
+    54→  ExternalLink,
+    55→  ImageIcon,
+    56→  MoreVertical,
+    57→  Loader2,
+    58→  CheckCircle,
+    59→  FolderOpen,
+    60→  ChevronLeft,
+    61→  ChevronRight,
+    62→  Cloud,
+    63→  Info,
+    64→  ZoomIn,
+    65→} from "lucide-react";
+    66→import { useToast } from "@/hooks/use-toast";
+    67→import { cn } from "@/lib/utils";
+    68→
+    69→interface MediaItem {
+    70→  id: string;
+    71→  url: string;
+    72→  cloudinaryId: string | null;
+    73→  altText: string | null;
+    74→  filename: string | null;
+    75→  mimeType: string | null;
+    76→  fileSize: number | null;
+    77→  width: number | null;
+    78→  height: number | null;
+    79→  folder: string | null;
+    80→  uploadedBy: string | null;
+    81→  createdAt: string;
+    82→  thumbnailUrl: string;
+    83→  optimizedUrl: string;
+    84→}
+    85→
+    86→interface Pagination {
+    87→  page: number;
+    88→  limit: number;
+    89→  total: number;
+    90→  totalPages: number;
+    91→}
+    92→
+    93→type ViewMode = "grid" | "list";
+    94→
+    95→export default function MediaManagerPage() {
+    96→  const { toast } = useToast();
+    97→  const fileInputRef = useRef<HTMLInputElement>(null);
+    98→
+    99→  const [media, setMedia] = useState<MediaItem[]>([]);
+   100→  const [pagination, setPagination] = useState<Pagination>({
+   101→    page: 1,
+   102→    limit: 20,
+   103→    total: 0,
+   104→    totalPages: 0,
+   105→  });
+   106→  const [loading, setLoading] = useState(true);
+   107→  const [search, setSearch] = useState("");
+   108→  const [viewMode, setViewMode] = useState<ViewMode>("grid");
+   109→  const [selectedMedia, setSelectedMedia] = useState<MediaItem | null>(null);
+   110→  const [previewOpen, setPreviewOpen] = useState(false);
+   111→  const [deleteTarget, setDeleteTarget] = useState<MediaItem | null>(null);
+   112→  const [uploading, setUploading] = useState(false);
+   113→  const [uploadProgress, setUploadProgress] = useState<string>("");
+   114→  const [dragOver, setDragOver] = useState(false);
+   115→  const [copiedId, setCopiedId] = useState<string | null>(null);
+   116→
+   117→  // Fetch media
+   118→  const fetchMedia = useCallback(
+   119→    async (page = 1, searchQuery = "") => {
+   120→      setLoading(true);
+   121→      try {
+   122→        const params = new URLSearchParams({
+   123→          page: page.toString(),
+   124→          limit: "20",
+   125→          search: searchQuery,
+   126→        });
+   127→        const res = await fetch(`/api/admin/media?${params}`);
+   128→        if (!res.ok) throw new Error("Failed to fetch media");
+   129→        const data = await res.json();
+   130→        setMedia(data.media || []);
+   131→        setPagination(
+   132→          data.pagination || { page: 1, limit: 20, total: 0, totalPages: 0 }
+   133→        );
+   134→      } catch {
+   135→        toast({
+   136→          title: "Error",
+   137→          description: "Failed to load media library",
+   138→          variant: "destructive",
+   139→        });
+   140→      } finally {
+   141→        setLoading(false);
+   142→      }
+   143→    },
+   144→    [toast]
+   145→  );
+   146→
+   147→  useEffect(() => {
+   148→    fetchMedia(1, search);
+   149→  }, [fetchMedia, search]);
+   150→
+   151→  // Upload handler
+   152→  const handleUpload = async (files: FileList | File[]) => {
+   153→    if (files.length === 0) return;
+   154→
+   155→    setUploading(true);
+   156→    setUploadProgress(`Uploading 0/${files.length}...`);
+   157→
+   158→    let successCount = 0;
+   159→    let errorCount = 0;
+   160→
+   161→    for (let i = 0; i < files.length; i++) {
+   162→      const file = files[i];
+   163→      setUploadProgress(`Uploading ${i + 1}/${files.length}: ${file.name}`);
+   164→
+   165→      try {
+   166→        const formData = new FormData();
+   167→        formData.append("file", file);
+   168→        if (file.name) {
+   169→          formData.append("altText", file.name.replace(/\.[^/.]+$/, ""));
+   170→        }
+   171→
+   172→        const res = await fetch("/api/admin/upload", {
+   173→          method: "POST",
+   174→          body: formData,
+   175→        });
+   176→
+   177→        if (!res.ok) {
+   178→          const errorData = await res.json();
+   179→          throw new Error(errorData.error || "Upload failed");
+   180→        }
+   181→
+   182→        successCount++;
+   183→      } catch {
+   184→        errorCount++;
+   185→      }
+   186→    }
+   187→
+   188→    setUploading("");
+   189→    setUploading(false);
+   190→
+   191→    if (successCount > 0) {
+   192→      toast({
+   193→        title: "Upload Complete",
+   194→        description: `${successCount} image${successCount > 1 ? "s" : ""} uploaded to Cloudinary${errorCount > 0 ? `. ${errorCount} failed.` : "."}`,
+   195→      });
+   196→      fetchMedia(1, search);
+   197→    }
+   198→
+   199→    if (errorCount > 0 && successCount === 0) {
+   200→      toast({
+   201→        title: "Upload Failed",
+   202→        description: `All ${errorCount} upload(s) failed. Check file format and size.`,
+   203→        variant: "destructive",
+   204→      });
+   205→    }
+   206→  };
+   207→
+   208→  // Drag & drop handlers
+   209→  const handleDragOver = (e: React.DragEvent) => {
+   210→    e.preventDefault();
+   211→    setDragOver(true);
+   212→  };
+   213→
+   214→  const handleDragLeave = (e: React.DragEvent) => {
+   215→    e.preventDefault();
+   216→    setDragOver(false);
+   217→  };
+   218→
+   219→  const handleDrop = (e: React.DragEvent) => {
+   220→    e.preventDefault();
+   221→    setDragOver(false);
+   222→    const files = e.dataTransfer.files;
+   223→    if (files.length > 0) handleUpload(files);
+   224→  };
+   225→
+   226→  // Copy URL
+   227→  const copyUrl = async (item: MediaItem) => {
+   228→    try {
+   229→      await navigator.clipboard.writeText(item.url);
+   230→      setCopiedId(item.id);
+   231→      toast({ title: "URL Copied", description: "Image URL copied to clipboard" });
+   232→      setTimeout(() => setCopiedId(null), 2000);
+   233→    } catch {
+   234→      toast({
+   235→        title: "Copy Failed",
+   236→        description: "Could not copy URL",
+   237→        variant: "destructive",
+   238→      });
+   239→    }
+   240→  };
+   241→
+   242→  // Delete handler
+   243→  const handleDelete = async () => {
+   244→    if (!deleteTarget) return;
+   245→
+   246→    try {
+   247→      const res = await fetch(`/api/admin/media?id=${deleteTarget.id}`, {
+   248→        method: "DELETE",
+   249→      });
+   250→      if (!res.ok) throw new Error("Delete failed");
+   251→
+   252→      toast({
+   253→        title: "Deleted",
+   254→        description: "Image removed from Cloudinary and database",
+   255→      });
+   256→      fetchMedia(pagination.page, search);
+   257→    } catch {
+   258→      toast({
+   259→        title: "Delete Failed",
+   260→        description: "Could not delete the image",
+   261→        variant: "destructive",
+   262→      });
+   263→    } finally {
+   264→      setDeleteTarget(null);
+   265→    }
+   266→  };
+   267→
+   268→  // Format file size
+   269→  const formatSize = (bytes: number | null) => {
+   270→    if (!bytes) return "—";
+   271→    if (bytes < 1024) return `${bytes} B`;
+   272→    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+   273→    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+   274→  };
+   275→
+   276→  // Format date
+   277→  const formatDate = (dateStr: string) =>
+   278→    new Date(dateStr).toLocaleDateString("en-US", {
+   279→      year: "numeric",
+   280→      month: "short",
+   281→      day: "numeric",
+   282→      hour: "2-digit",
+   283→      minute: "2-digit",
+   284→    });
+   285→
+   286→  return (
+   287→    <div className="space-y-6">
+   288→      {/* Page Header */}
+   289→      <div className="flex items-center justify-between">
+   290→        <div>
+   291→          <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
+   292→            <ImageIcon className="h-6 w-6 text-brand-emerald" />
+   293→            Media Manager
+   294→          </h1>
+   295→          <p className="text-sm text-gray-500 mt-1 flex items-center gap-1">
+   296→            <Cloud className="h-3.5 w-3.5" />
+   297→            Images stored in Cloudinary — only URLs saved in database
+   298→          </p>
+   299→        </div>
+   300→        <Button
+   301→          onClick={() => fileInputRef.current?.click()}
+   302→          disabled={uploading}
+   303→          className="bg-brand-emerald hover:bg-brand-emerald/90"
+   304→        >
+   305→          {uploading ? (
+   306→            <>
+   307→              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+   308→              {uploadProgress}
+   309→            </>
+   310→          ) : (
+   311→            <>
+   312→              <Upload className="h-4 w-4 mr-2" />
+   313→              Upload Images
+   314→            </>
+   315→          )}
+   316→        </Button>
+   317→        <input
+   318→          ref={fileInputRef}
+   319→          type="file"
+   320→          accept="image/jpeg,image/png,image/webp,image/gif,image/svg+xml"
+   321→          multiple
+   322→          className="hidden"
+   323→          onChange={(e) => e.target.files && handleUpload(e.target.files)}
+   324→        />
+   325→      </div>
+   326→
+   327→      {/* Upload Drop Zone (visible when dragging) */}
+   328→      {dragOver && (
+   329→        <div
+   330→          className="border-2 border-dashed border-brand-emerald bg-brand-emerald/5 rounded-xl p-12 text-center"
+   331→          onDragOver={handleDragOver}
+   332→          onDragLeave={handleDragLeave}
+   333→          onDrop={handleDrop}
+   334→        >
+   335→          <Upload className="h-12 w-12 text-brand-emerald mx-auto mb-3" />
+   336→          <p className="text-lg font-semibold text-brand-emerald">
+   337→            Drop images here to upload to Cloudinary
+   338→          </p>
+   339→          <p className="text-sm text-gray-500 mt-1">
+   340→            JPEG, PNG, WebP, GIF, SVG — Max 10MB per file
+   341→          </p>
+   342→        </div>
+   343→      )}
+   344→
+   345→      {/* Upload Progress Bar */}
+   346→      {uploading && (
+   347→        <div className="bg-brand-emerald/10 border border-brand-emerald/20 rounded-lg p-3 flex items-center gap-3">
+   348→          <Loader2 className="h-5 w-5 text-brand-emerald animate-spin" />
+   349→          <span className="text-sm font-medium text-brand-emerald">
+   350→            {uploadProgress}
+   351→          </span>
+   352→        </div>
+   353→      )}
+   354→
+   355→      {/* Search & Filters */}
+   356→      <div
+   357→        className="flex items-center gap-3 flex-wrap"
+   358→        onDragOver={handleDragOver}
+   359→        onDragLeave={handleDragLeave}
+   360→        onDrop={handleDrop}
+   361→      >
+   362→        <div className="relative flex-1 min-w-[200px] max-w-md">
+   363→          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+   364→          <Input
+   365→            placeholder="Search by filename or alt text..."
+   366→            value={search}
+   367→            onChange={(e) => setSearch(e.target.value)}
+   368→            className="pl-9"
+   369→          />
+   370→        </div>
+   371→
+   372→        <div className="flex items-center border rounded-lg overflow-hidden">
+   373→          <Button
+   374→            variant={viewMode === "grid" ? "default" : "ghost"}
+   375→            size="sm"
+   376→            onClick={() => setViewMode("grid")}
+   377→            className={cn(
+   378→              "rounded-none",
+   379→              viewMode === "grid" && "bg-brand-emerald hover:bg-brand-emerald/90"
+   380→            )}
+   381→          >
+   382→            <Grid3X3 className="h-4 w-4" />
+   383→          </Button>
+   384→          <Button
+   385→            variant={viewMode === "list" ? "default" : "ghost"}
+   386→            size="sm"
+   387→            onClick={() => setViewMode("list")}
+   388→            className={cn(
+   389→              "rounded-none",
+   390→              viewMode === "list" && "bg-brand-emerald hover:bg-brand-emerald/90"
+   391→            )}
+   392→          >
+   393→            <List className="h-4 w-4" />
+   394→          </Button>
+   395→        </div>
+   396→
+   397→        <Badge variant="outline" className="text-xs">
+   398→          {pagination.total} image{pagination.total !== 1 ? "s" : ""}
+   399→        </Badge>
+   400→      </div>
+   401→
+   402→      {/* Empty state (no images, no search) */}
+   403→      {!dragOver && media.length === 0 && !loading && !search && (
+   404→        <div
+   405→          className="border-2 border-dashed border-gray-300 rounded-xl p-16 text-center hover:border-brand-emerald/50 hover:bg-brand-emerald/5 transition-colors cursor-pointer"
+   406→          onDragOver={handleDragOver}
+   407→          onDragLeave={handleDragLeave}
+   408→          onDrop={handleDrop}
+   409→          onClick={() => fileInputRef.current?.click()}
+   410→        >
+   411→          <Cloud className="h-16 w-16 text-gray-300 mx-auto mb-4" />
+   412→          <h3 className="text-lg font-semibold text-gray-600">No images yet</h3>
+   413→          <p className="text-sm text-gray-400 mt-1">
+   414→            Drag & drop images here, or click to browse files
+   415→          </p>
+   416→          <p className="text-xs text-gray-400 mt-2">
+   417→            Images will be uploaded to Cloudinary — only URLs stored in database
+   418→          </p>
+   419→        </div>
+   420→      )}
+   421→
+   422→      {/* Loading Skeleton */}
+   423→      {loading && (
+   424→        <div
+   425→          className={cn(
+   426→            viewMode === "grid"
+   427→              ? "grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4"
+   428→              : "space-y-3"
+   429→          )}
+   430→        >
+   431→          {Array.from({ length: 8 }).map((_, i) =>
+   432→            viewMode === "grid" ? (
+   433→              <div key={i} className="space-y-2">
+   434→                <Skeleton className="aspect-square rounded-lg" />
+   435→                <Skeleton className="h-4 w-3/4" />
+   436→              </div>
+   437→            ) : (
+   438→              <div key={i} className="flex items-center gap-3 p-3">
+   439→                <Skeleton className="h-12 w-12 rounded" />
+   440→                <div className="flex-1 space-y-2">
+   441→                  <Skeleton className="h-4 w-1/3" />
+   442→                  <Skeleton className="h-3 w-1/4" />
+   443→                </div>
+   444→              </div>
+   445→            )
+   446→          )}
+   447→        </div>
+   448→      )}
+   449→
+   450→      {/* Grid View */}
+   451→      {!loading && viewMode === "grid" && media.length > 0 && (
+   452→        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
+   453→          {media.map((item) => (
+   454→            <div
+   455→              key={item.id}
+   456→              className="group relative bg-white border border-gray-200 rounded-xl overflow-hidden hover:shadow-lg hover:border-brand-emerald/30 transition-all duration-200"
+   457→              onDragOver={handleDragOver}
+   458→              onDragLeave={handleDragLeave}
+   459→              onDrop={handleDrop}
+   460→            >
+   461→              {/* Image */}
+   462→              <div
+   463→                className="aspect-square relative bg-gray-100 cursor-pointer overflow-hidden"
+   464→                onClick={() => {
+   465→                  setSelectedMedia(item);
+   466→                  setPreviewOpen(true);
+   467→                }}
+   468→              >
+   469→                <Image
+   470→                  src={item.thumbnailUrl || item.url}
+   471→                  alt={item.altText || item.filename || "Image"}
+   472→                  fill
+   473→                  className="object-cover group-hover:scale-105 transition-transform duration-200"
+   474→                  sizes="(max-width: 640px) 50vw, (max-width: 768px) 33vw, (max-width: 1024px) 25vw, 20vw"
+   475→                />
+   476→
+   477→                {/* Hover overlay */}
+   478→                <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors flex items-center justify-center gap-2 opacity-0 group-hover:opacity-100">
+   479→                  <Button
+   480→                    size="sm"
+   481→                    variant="secondary"
+   482→                    className="h-8 w-8 p-0 bg-white/90 hover:bg-white"
+   483→                    onClick={(e) => {
+   484→                      e.stopPropagation();
+   485→                      setSelectedMedia(item);
+   486→                      setPreviewOpen(true);
+   487→                    }}
+   488→                  >
+   489→                    <ZoomIn className="h-4 w-4" />
+   490→                  </Button>
+   491→                  <Button
+   492→                    size="sm"
+   493→                    variant="secondary"
+   494→                    className="h-8 w-8 p-0 bg-white/90 hover:bg-white"
+   495→                    onClick={(e) => {
+   496→                      e.stopPropagation();
+   497→                      copyUrl(item);
+   498→                    }}
+   499→                  >
+   500→                    {copiedId === item.id ? (
+   501→                      <CheckCircle className="h-4 w-4 text-green-600" />
+   502→                    ) : (
+   503→                      <Copy className="h-4 w-4" />
+   504→                    )}
+   505→                  </Button>
+   506→                </div>
+   507→              </div>
+   508→
+   509→              {/* Info */}
+   510→              <div className="p-2.5">
+   511→                <p
+   512→                  className="text-xs font-medium text-gray-700 truncate"
+   513→                  title={item.filename || "Untitled"}
+   514→                >
+   515→                  {item.filename || "Untitled"}
+   516→                </p>
+   517→                <div className="flex items-center justify-between mt-1">
+   518→                  <span className="text-[10px] text-gray-400">
+   519→                    {formatSize(item.fileSize)}
+   520→                  </span>
+   521→                  {item.width && item.height && (
+   522→                    <span className="text-[10px] text-gray-400">
+   523→                      {item.width}×{item.height}
+   524→                    </span>
+   525→                  )}
+   526→                </div>
+   527→              </div>
+   528→
+   529→              {/* More menu */}
+   530→              <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
+   531→                <DropdownMenu>
+   532→                  <DropdownMenuTrigger asChild>
+   533→                    <Button
+   534→                      variant="secondary"
+   535→                      size="sm"
+   536→                      className="h-7 w-7 p-0 bg-white/90 hover:bg-white shadow-sm"
+   537→                    >
+   538→                      <MoreVertical className="h-3.5 w-3.5" />
+   539→                    </Button>
+   540→                  </DropdownMenuTrigger>
+   541→                  <DropdownMenuContent align="end" className="w-48">
+   542→                    <DropdownMenuItem
+   543→                      onClick={() => {
+   544→                        setSelectedMedia(item);
+   545→                        setPreviewOpen(true);
+   546→                      }}
+   547→                    >
+   548→                      <ZoomIn className="h-4 w-4 mr-2" />
+   549→                      Preview
+   550→                    </DropdownMenuItem>
+   551→                    <DropdownMenuItem onClick={() => copyUrl(item)}>
+   552→                      <Copy className="h-4 w-4 mr-2" />
+   553→                      Copy URL
+   554→                    </DropdownMenuItem>
+   555→                    <DropdownMenuItem
+   556→                      onClick={() => window.open(item.url, "_blank")}
+   557→                    >
+   558→                      <ExternalLink className="h-4 w-4 mr-2" />
+   559→                      Open Original
+   560→                    </DropdownMenuItem>
+   561→                    <DropdownMenuItem
+   562→                      onClick={() => setDeleteTarget(item)}
+   563→                      className="text-red-600 focus:text-red-600"
+   564→                    >
+   565→                      <Trash2 className="h-4 w-4 mr-2" />
+   566→                      Delete
+   567→                    </DropdownMenuItem>
+   568→                  </DropdownMenuContent>
+   569→                </DropdownMenu>
+   570→              </div>
+   571→            </div>
+   572→          ))}
+   573→        </div>
+   574→      )}
+   575→
+   576→      {/* List View */}
+   577→      {!loading && viewMode === "list" && media.length > 0 && (
+   578→        <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
+   579→          <table className="w-full">
+   580→            <thead className="bg-gray-50 border-b">
+   581→              <tr>
+   582→                <th className="text-left text-xs font-medium text-gray-500 p-3">Image</th>
+   583→                <th className="text-left text-xs font-medium text-gray-500 p-3">Filename</th>
+   584→                <th className="text-left text-xs font-medium text-gray-500 p-3 hidden md:table-cell">Size</th>
+   585→                <th className="text-left text-xs font-medium text-gray-500 p-3 hidden lg:table-cell">Dimensions</th>
+   586→                <th className="text-left text-xs font-medium text-gray-500 p-3 hidden sm:table-cell">Date</th>
+   587→                <th className="text-right text-xs font-medium text-gray-500 p-3">Actions</th>
+   588→              </tr>
+   589→            </thead>
+   590→            <tbody className="divide-y">
+   591→              {media.map((item) => (
+   592→                <tr key={item.id} className="hover:bg-gray-50 transition-colors">
+   593→                  <td className="p-3">
+   594→                    <div
+   595→                      className="h-12 w-12 rounded-lg overflow-hidden bg-gray-100 cursor-pointer relative"
+   596→                      onClick={() => {
+   597→                        setSelectedMedia(item);
+   598→                        setPreviewOpen(true);
+   599→                      }}
+   600→                    >
+   601→                      <Image
+   602→                        src={item.thumbnailUrl || item.url}
+   603→                        alt={item.altText || "Image"}
+   604→                        fill
+   605→                        className="object-cover"
+   606→                        sizes="48px"
+   607→                      />
+   608→                    </div>
+   609→                  </td>
+   610→                  <td className="p-3">
+   611→                    <p className="text-sm font-medium text-gray-700 truncate max-w-[200px]" title={item.filename || "Untitled"}>
+   612→                      {item.filename || "Untitled"}
+   613→                    </p>
+   614→                    {item.altText && (
+   615→                      <p className="text-xs text-gray-400 truncate max-w-[200px]">{item.altText}</p>
+   616→                    )}
+   617→                  </td>
+   618→                  <td className="p-3 hidden md:table-cell">
+   619→                    <span className="text-sm text-gray-500">{formatSize(item.fileSize)}</span>
+   620→                  </td>
+   621→                  <td className="p-3 hidden lg:table-cell">
+   622→                    <span className="text-sm text-gray-500">
+   623→                      {item.width && item.height ? `${item.width}×${item.height}` : "—"}
+   624→                    </span>
+   625→                  </td>
+   626→                  <td className="p-3 hidden sm:table-cell">
+   627→                    <span className="text-sm text-gray-500">{formatDate(item.createdAt)}</span>
+   628→                  </td>
+   629→                  <td className="p-3">
+   630→                    <div className="flex items-center justify-end gap-1">
+   631→                      <Button variant="ghost" size="sm" className="h-8 w-8 p-0" onClick={() => copyUrl(item)} title="Copy URL">
+   632→                        {copiedId === item.id ? <CheckCircle className="h-4 w-4 text-green-600" /> : <Copy className="h-4 w-4" />}
+   633→                      </Button>
+   634→                      <Button variant="ghost" size="sm" className="h-8 w-8 p-0" onClick={() => window.open(item.url, "_blank")} title="Open original">
+   635→                        <ExternalLink className="h-4 w-4" />
+   636→                      </Button>
+   637→                      <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-red-500 hover:text-red-600 hover:bg-red-50" onClick={() => setDeleteTarget(item)} title="Delete">
+   638→                        <Trash2 className="h-4 w-4" />
+   639→                      </Button>
+   640→                    </div>
+   641→                  </td>
+   642→                </tr>
+   643→              ))}
+   644→            </tbody>
+   645→          </table>
+   646→        </div>
+   647→      )}
+   648→
+   649→      {/* No search results */}
+   650→      {!loading && search && media.length === 0 && (
+   651→        <div className="text-center py-12">
+   652→          <Search className="h-12 w-12 text-gray-300 mx-auto mb-3" />
+   653→          <h3 className="text-lg font-semibold text-gray-600">No images found</h3>
+   654→          <p className="text-sm text-gray-400 mt-1">Try a different search term</p>
+   655→        </div>
+   656→      )}
+   657→
+   658→      {/* Pagination */}
+   659→      {!loading && pagination.totalPages > 1 && (
+   660→        <div className="flex items-center justify-center gap-2">
+   661→          <Button
+   662→            variant="outline"
+   663→            size="sm"
+   664→            disabled={pagination.page <= 1}
+   665→            onClick={() => fetchMedia(pagination.page - 1, search)}
+   666→          >
+   667→            <ChevronLeft className="h-4 w-4 mr-1" />
+   668→            Previous
+   669→          </Button>
+   670→          <span className="text-sm text-gray-500 px-3">
+   671→            Page {pagination.page} of {pagination.totalPages}
+   672→          </span>
+   673→          <Button
+   674→            variant="outline"
+   675→            size="sm"
+   676→            disabled={pagination.page >= pagination.totalPages}
+   677→            onClick={() => fetchMedia(pagination.page + 1, search)}
+   678→          >
+   679→            Next
+   680→            <ChevronRight className="h-4 w-4 ml-1" />
+   681→          </Button>
+   682→        </div>
+   683→      )}
+   684→
+   685→      {/* Image Preview Dialog */}
+   686→      <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
+   687→        <DialogContent className="max-w-4xl max-h-[90vh] overflow-auto">
+   688→          <DialogHeader>
+   689→            <DialogTitle className="flex items-center gap-2">
+   690→              <ImageIcon className="h-5 w-5 text-brand-emerald" />
+   691→              {selectedMedia?.filename || "Image Preview"}
+   692→            </DialogTitle>
+   693→            <DialogDescription>Image details and actions</DialogDescription>
+   694→          </DialogHeader>
+   695→
+   696→          {selectedMedia && (
+   697→            <div className="space-y-4">
+   698→              <div className="relative bg-gray-100 rounded-lg overflow-hidden flex items-center justify-center min-h-[300px] max-h-[500px]">
+   699→                <Image
+   700→                  src={selectedMedia.url}
+   701→                  alt={selectedMedia.altText || "Preview"}
+   702→                  width={selectedMedia.width || 800}
+   703→                  height={selectedMedia.height || 600}
+   704→                  className="max-h-[500px] w-auto object-contain"
+   705→                  sizes="(max-width: 768px) 100vw, 800px"
+   706→                />
+   707→              </div>
+   708→
+   709→              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 p-4 bg-gray-50 rounded-lg">
+   710→                <div>
+   711→                  <p className="text-xs text-gray-400 flex items-center gap-1"><Info className="h-3 w-3" /> File Size</p>
+   712→                  <p className="text-sm font-medium">{formatSize(selectedMedia.fileSize)}</p>
+   713→                </div>
+   714→                <div>
+   715→                  <p className="text-xs text-gray-400">Dimensions</p>
+   716→                  <p className="text-sm font-medium">
+   717→                    {selectedMedia.width && selectedMedia.height
+   718→                      ? `${selectedMedia.width}×${selectedMedia.height}`
+   719→                      : "—"}
+   720→                  </p>
+   721→                </div>
+   722→                <div>
+   723→                  <p className="text-xs text-gray-400 flex items-center gap-1"><FolderOpen className="h-3 w-3" /> Folder</p>
+   724→                  <p className="text-sm font-medium">{selectedMedia.folder || "—"}</p>
+   725→                </div>
+   726→                <div>
+   727→                  <p className="text-xs text-gray-400">Type</p>
+   728→                  <p className="text-sm font-medium">{selectedMedia.mimeType || "—"}</p>
+   729→                </div>
+   730→              </div>
+   731→
+   732→              <div className="space-y-2">
+   733→                <label className="text-xs font-medium text-gray-500 uppercase tracking-wider">Image URL</label>
+   734→                <div className="flex items-center gap-2">
+   735→                  <Input value={selectedMedia.url} readOnly className="text-xs font-mono bg-gray-50" />
+   736→                  <Button variant="outline" size="sm" onClick={() => copyUrl(selectedMedia)} className="flex-shrink-0">
+   737→                    {copiedId === selectedMedia.id ? <CheckCircle className="h-4 w-4 text-green-600" /> : <Copy className="h-4 w-4" />}
+   738→                  </Button>
+   739→                </div>
+   740→              </div>
+   741→
+   742→              {selectedMedia.altText && (
+   743→                <div>
+   744→                  <label className="text-xs font-medium text-gray-500 uppercase tracking-wider">Alt Text</label>
+   745→                  <p className="text-sm text-gray-700 mt-1">{selectedMedia.altText}</p>
+   746→                </div>
+   747→              )}
+   748→
+   749→              {selectedMedia.cloudinaryId && (
+   750→                <div>
+   751→                  <label className="text-xs font-medium text-gray-500 uppercase tracking-wider">Cloudinary ID</label>
+   752→                  <p className="text-xs font-mono text-gray-400 mt-1">{selectedMedia.cloudinaryId}</p>
+   753→                </div>
+   754→              )}
+   755→
+   756→              <div>
+   757→                <label className="text-xs font-medium text-gray-500 uppercase tracking-wider">Uploaded</label>
+   758→                <p className="text-sm text-gray-700 mt-1">{formatDate(selectedMedia.createdAt)}</p>
+   759→              </div>
+   760→            </div>
+   761→          )}
+   762→
+   763→          <DialogFooter className="gap-2">
+   764→            <Button variant="outline" onClick={() => window.open(selectedMedia?.url, "_blank")}>
+   765→              <ExternalLink className="h-4 w-4 mr-2" /> Open Original
+   766→            </Button>
+   767→            <Button variant="outline" onClick={() => selectedMedia && copyUrl(selectedMedia)}>
+   768→              <Copy className="h-4 w-4 mr-2" /> Copy URL
+   769→            </Button>
+   770→            <Button
+   771→              variant="destructive"
+   772→              onClick={() => {
+   773→                setPreviewOpen(false);
+   774→                if (selectedMedia) setDeleteTarget(selectedMedia);
+   775→              }}
+   776→            >
+   777→              <Trash2 className="h-4 w-4 mr-2" /> Delete
+   778→            </Button>
+   779→          </DialogFooter>
+   780→        </DialogContent>
+   781→      </Dialog>
+   782→
+   783→      {/* Delete Confirmation */}
+   784→      <AlertDialog open={!!deleteTarget} onOpenChange={(open) => !open && setDeleteTarget(null)}>
+   785→        <AlertDialogContent>
+   786→          <AlertDialogHeader>
+   787→            <AlertDialogTitle>Delete Image</AlertDialogTitle>
+   788→            <AlertDialogDescription>
+   789→              This will permanently delete &quot;{deleteTarget?.filename}&quot; from Cloudinary and remove the URL from the database. This action cannot be undone.
+   790→            </AlertDialogDescription>
+   791→          </AlertDialogHeader>
+   792→          <AlertDialogFooter>
+   793→            <AlertDialogCancel>Cancel</AlertDialogCancel>
+   794→            <AlertDialogAction onClick={handleDelete} className="bg-red-600 hover:bg-red-700">
+   795→              Delete from Cloudinary
+   796→            </AlertDialogAction>
+   797→          </AlertDialogFooter>
+   798→        </AlertDialogContent>
+   799→      </AlertDialog>
+   800→    </div>
+   801→  );
+   802→}
+   803→

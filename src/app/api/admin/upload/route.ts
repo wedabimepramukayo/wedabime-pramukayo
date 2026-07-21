@@ -1,16 +1,21 @@
 /**
- * API: Media Upload — Handle file uploads to /public/uploads/
- * Wedabime Pramukayo CMS
+ * API: Media Upload — Upload images to Cloudinary, store only URLs in DB
+ * Wedabime Pramukayo CMS — Cloudinary Integration
+ *
+ * Flow: FormData → Cloudinary upload → Get URL → Store URL in DB
+ * This keeps the database lightweight — no binary data stored.
  */
 
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
-import { writeFile, mkdir } from "fs/promises";
-import path from "path";
 import { db } from "@/lib/db";
+import {
+  uploadToCloudinary,
+  isCloudinaryConfigured,
+} from "@/lib/cloudinary";
 
-// POST /api/admin/upload — Upload a file
+// POST /api/admin/upload — Upload a file to Cloudinary
 export async function POST(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
@@ -18,9 +23,18 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
+    // Verify Cloudinary is configured
+    if (!isCloudinaryConfigured()) {
+      return NextResponse.json(
+        { error: "Cloudinary is not configured. Please set CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, and CLOUDINARY_API_SECRET in your environment variables." },
+        { status: 500 }
+      );
+    }
+
     const formData = await request.formData();
     const file = formData.get("file") as File | null;
     const altText = formData.get("altText") as string | null;
+    const folder = formData.get("folder") as string | null;
 
     if (!file) {
       return NextResponse.json({ error: "No file provided" }, { status: 400 });
@@ -41,51 +55,56 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Validate file size (5MB max)
-    const maxSize = 5 * 1024 * 1024;
+    // Validate file size (10MB max for Cloudinary)
+    const maxSize = 10 * 1024 * 1024;
     if (file.size > maxSize) {
       return NextResponse.json(
-        { error: "File too large. Maximum size: 5MB" },
+        { error: "File too large. Maximum size: 10MB" },
         { status: 400 }
       );
     }
 
-    // Generate unique filename
+    // Convert file to buffer
     const bytes = await file.arrayBuffer();
     const buffer = Buffer.from(bytes);
 
-    const ext = path.extname(file.name) || ".jpg";
-    const timestamp = Date.now();
-    const randomStr = Math.random().toString(36).substring(2, 8);
-    const filename = `${timestamp}-${randomStr}${ext}`;
+    // Upload to Cloudinary
+    const cloudinaryResult = await uploadToCloudinary(
+      buffer,
+      file.name,
+      file.type,
+      folder ? { folder: folder } : undefined
+    );
 
-    // Ensure uploads directory exists
-    const uploadsDir = path.join(process.cwd(), "public", "uploads");
-    await mkdir(uploadsDir, { recursive: true });
-
-    // Write file
-    const filepath = path.join(uploadsDir, filename);
-    await writeFile(filepath, buffer);
-
-    const url = `/uploads/${filename}`;
-
-    // Save to Media model
+    // Save only the URL and metadata to database
     const media = await db.media.create({
       data: {
-        url,
+        url: cloudinaryResult.secureUrl,
+        cloudinaryId: cloudinaryResult.cloudinaryId,
         altText: altText || null,
         filename: file.name,
-        mimeType: file.type,
-        fileSize: file.size,
+        mimeType: cloudinaryResult.mimeType,
+        fileSize: cloudinaryResult.fileSize,
+        width: cloudinaryResult.width,
+        height: cloudinaryResult.height,
+        folder: cloudinaryResult.folder,
         uploadedBy: (session.user as any)?.id || null,
       },
     });
 
-    return NextResponse.json({ media, url }, { status: 201 });
+    return NextResponse.json(
+      {
+        media,
+        url: cloudinaryResult.secureUrl,
+        cloudinaryId: cloudinaryResult.cloudinaryId,
+        thumbnailUrl: `https://res.cloudinary.com/${process.env.CLOUDINARY_CLOUD_NAME}/image/upload/c_fill,w_300,h_300,q_auto:low/${cloudinaryResult.cloudinaryId}`,
+      },
+      { status: 201 }
+    );
   } catch (error) {
     console.error("Upload error:", error);
     return NextResponse.json(
-      { error: "Failed to upload file" },
+      { error: error instanceof Error ? error.message : "Failed to upload file" },
       { status: 500 }
     );
   }
