@@ -1,10 +1,12 @@
 /**
  * Public Site Footer — Wedabime Pramukayo
- * Multi-column footer with company info, services, and eco badge
+ * Multi-column footer with dynamic company info, services, and eco badge
+ * Contact info pulled from CMS settings
  */
 
 import Link from "next/link";
 import Image from "next/image";
+import { db } from "@/lib/db";
 import {
   MapPin,
   Clock,
@@ -16,6 +18,7 @@ import {
   Instagram,
   Youtube,
 } from "lucide-react";
+import { WhatsAppButton } from "./whatsapp-button";
 
 const serviceLinks = [
   { label: "i-Panel Heavy Flat", href: "/services/i-panel-heavy-flat" },
@@ -34,7 +37,34 @@ const quickLinks = [
   { label: "Contact", href: "/contact" },
 ];
 
-export function PublicFooter() {
+export const revalidate = 300;
+
+async function getFooterData() {
+  const settings = await db.siteSetting.findMany({
+    where: { isPublic: true },
+    select: { key: true, value: true, category: true },
+  });
+
+  const grouped: Record<string, Record<string, string>> = {};
+  settings.forEach((s) => {
+    if (!grouped[s.category]) grouped[s.category] = {};
+    grouped[s.category][s.key] = s.value;
+  });
+
+  return { settings: grouped };
+}
+
+export async function PublicFooter() {
+  const { settings } = await getFooterData();
+  const contact = settings.contact || {};
+  const social = settings.social || {};
+
+  const phone = contact.phone;
+  const email = contact.email;
+  const address = contact.address || "Gampaha District, Sri Lanka";
+  const hours = contact.business_hours || "Mon-Sat: 8:00 AM - 6:00 PM";
+  const whatsapp = social.whatsapp;
+
   return (
     <footer className="bg-brand-dark text-brand-sage/80">
       {/* Main Footer */}
@@ -117,15 +147,33 @@ export function PublicFooter() {
             <ul className="space-y-3">
               <li className="flex items-start gap-2">
                 <MapPin className="h-4 w-4 text-brand-spring flex-shrink-0 mt-0.5" />
-                <span className="text-sm text-brand-sage/60">
-                  Gampaha District, Sri Lanka
-                </span>
+                <span className="text-sm text-brand-sage/60">{address}</span>
               </li>
+              {phone && (
+                <li className="flex items-center gap-2">
+                  <Phone className="h-4 w-4 text-brand-teal flex-shrink-0" />
+                  <a
+                    href={`tel:${phone.replace(/[^0-9+]/g, "")}`}
+                    className="text-sm text-brand-sage/60 hover:text-brand-spring transition-colors"
+                  >
+                    {phone}
+                  </a>
+                </li>
+              )}
+              {email && (
+                <li className="flex items-center gap-2">
+                  <Mail className="h-4 w-4 text-brand-spring flex-shrink-0" />
+                  <a
+                    href={`mailto:${email}`}
+                    className="text-sm text-brand-sage/60 hover:text-brand-spring transition-colors"
+                  >
+                    {email}
+                  </a>
+                </li>
+              )}
               <li className="flex items-center gap-2">
                 <Clock className="h-4 w-4 text-brand-teal flex-shrink-0" />
-                <span className="text-sm text-brand-sage/60">
-                  Mon-Sat: 8:00 AM - 6:00 PM
-                </span>
+                <span className="text-sm text-brand-sage/60">{hours}</span>
               </li>
               <li className="flex items-center gap-2">
                 <Shield className="h-4 w-4 text-brand-gold flex-shrink-0" />
@@ -135,26 +183,61 @@ export function PublicFooter() {
               </li>
             </ul>
 
-            {/* Social Links Placeholder */}
+            {/* Social Links */}
             <div className="flex items-center gap-3 mt-4">
-              <a
-                href="#"
-                className="h-8 w-8 rounded-lg bg-brand-emerald/10 flex items-center justify-center hover:bg-brand-emerald/20 transition-colors"
-              >
-                <Facebook className="h-4 w-4 text-brand-sage/60" />
-              </a>
-              <a
-                href="#"
-                className="h-8 w-8 rounded-lg bg-brand-emerald/10 flex items-center justify-center hover:bg-brand-emerald/20 transition-colors"
-              >
-                <Instagram className="h-4 w-4 text-brand-sage/60" />
-              </a>
-              <a
-                href="#"
-                className="h-8 w-8 rounded-lg bg-brand-emerald/10 flex items-center justify-center hover:bg-brand-emerald/20 transition-colors"
-              >
-                <Youtube className="h-4 w-4 text-brand-sage/60" />
-              </a>
+              {social.facebook && (
+                <a
+                  href={social.facebook}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="h-8 w-8 rounded-lg bg-brand-emerald/10 flex items-center justify-center hover:bg-brand-emerald/20 transition-colors"
+                >
+                  <Facebook className="h-4 w-4 text-brand-sage/60" />
+                </a>
+              )}
+              {social.instagram && (
+                <a
+                  href={social.instagram}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="h-8 w-8 rounded-lg bg-brand-emerald/10 flex items-center justify-center hover:bg-brand-emerald/20 transition-colors"
+                >
+                  <Instagram className="h-4 w-4 text-brand-sage/60" />
+                </a>
+              )}
+              {social.youtube && (
+                <a
+                  href={social.youtube}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="h-8 w-8 rounded-lg bg-brand-emerald/10 flex items-center justify-center hover:bg-brand-emerald/20 transition-colors"
+                >
+                  <Youtube className="h-4 w-4 text-brand-sage/60" />
+                </a>
+              )}
+              {/* Always show social placeholders if no links configured */}
+              {!social.facebook && !social.instagram && !social.youtube && (
+                <>
+                  <a
+                    href="#"
+                    className="h-8 w-8 rounded-lg bg-brand-emerald/10 flex items-center justify-center hover:bg-brand-emerald/20 transition-colors"
+                  >
+                    <Facebook className="h-4 w-4 text-brand-sage/60" />
+                  </a>
+                  <a
+                    href="#"
+                    className="h-8 w-8 rounded-lg bg-brand-emerald/10 flex items-center justify-center hover:bg-brand-emerald/20 transition-colors"
+                  >
+                    <Instagram className="h-4 w-4 text-brand-sage/60" />
+                  </a>
+                  <a
+                    href="#"
+                    className="h-8 w-8 rounded-lg bg-brand-emerald/10 flex items-center justify-center hover:bg-brand-emerald/20 transition-colors"
+                  >
+                    <Youtube className="h-4 w-4 text-brand-sage/60" />
+                  </a>
+                </>
+              )}
             </div>
           </div>
         </div>
@@ -171,6 +254,9 @@ export function PublicFooter() {
           </p>
         </div>
       </div>
+
+      {/* WhatsApp Floating Button */}
+      <WhatsAppButton phone={whatsapp} />
     </footer>
   );
 }

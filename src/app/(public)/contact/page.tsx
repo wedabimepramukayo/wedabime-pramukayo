@@ -1,6 +1,6 @@
 /**
  * Contact Page — Wedabime Pramukayo
- * Contact form, business information, and map placeholder
+ * Contact form with real API submission, business information, and map placeholder
  */
 
 "use client";
@@ -10,23 +10,53 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
-import { MapPin, Clock, Phone, Mail, Send, CheckCircle, Loader2, TreePine, Shield } from "lucide-react";
+import { MapPin, Clock, Phone, Mail, Send, CheckCircle, Loader2, TreePine, Shield, AlertCircle } from "lucide-react";
+import { Breadcrumbs } from "@/components/public/breadcrumbs";
 
 export default function ContactPage() {
   const [sending, setSending] = useState(false);
   const [sent, setSent] = useState(false);
+  const [error, setError] = useState("");
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    setError("");
     setSending(true);
-    // Simulate sending (actual email integration would go here)
-    await new Promise((res) => setTimeout(res, 1500));
-    setSending(false);
-    setSent(true);
+
+    const form = e.currentTarget;
+    const data = {
+      name: (form.elements.namedItem("name") as HTMLInputElement).value,
+      email: (form.elements.namedItem("email") as HTMLInputElement).value,
+      phone: (form.elements.namedItem("phone") as HTMLInputElement).value,
+      subject: (form.elements.namedItem("subject") as HTMLInputElement).value,
+      message: (form.elements.namedItem("message") as HTMLTextAreaElement).value,
+    };
+
+    try {
+      const res = await fetch("/api/contact", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data),
+      });
+
+      const result = await res.json();
+
+      if (!res.ok) {
+        setError(result.error || "Something went wrong. Please try again.");
+        return;
+      }
+
+      setSent(true);
+    } catch {
+      setError("Network error. Please check your connection and try again.");
+    } finally {
+      setSending(false);
+    }
   };
 
   return (
     <div>
+      <Breadcrumbs items={[{ label: "Contact Us" }]} />
       {/* Hero */}
       <section className="relative py-20 text-white" style={{ background: "linear-gradient(135deg, #1B4332 0%, #2D6A4F 60%, #40916C 100%)" }}>
         <div className="relative max-w-7xl mx-auto px-4 text-center">
@@ -49,34 +79,42 @@ export default function ContactPage() {
                 <div className="text-center py-12">
                   <CheckCircle className="h-16 w-16 text-brand-spring mx-auto mb-4" />
                   <h3 className="text-xl font-bold text-foreground mb-2">Message Sent!</h3>
-                  <p className="text-muted-foreground">Thank you for reaching out. We&apos;ll get back to you within 24 hours.</p>
+                  <p className="text-muted-foreground mb-6">
+                    Thank you for reaching out. We&apos;ll get back to you within 24 hours.
+                  </p>
                   <Button onClick={() => setSent(false)} variant="outline" className="mt-4">
                     Send Another Message
                   </Button>
                 </div>
               ) : (
                 <form onSubmit={handleSubmit} className="space-y-5">
+                  {error && (
+                    <div className="flex items-center gap-2 p-3 rounded-lg bg-red-50 border border-red-200 text-red-700 text-sm">
+                      <AlertCircle className="h-4 w-4 flex-shrink-0" />
+                      {error}
+                    </div>
+                  )}
                   <div className="grid sm:grid-cols-2 gap-4">
                     <div className="space-y-2">
                       <Label htmlFor="name">Full Name *</Label>
-                      <Input id="name" name="name" placeholder="Your name" required />
+                      <Input id="name" name="name" placeholder="Your name" required disabled={sending} />
                     </div>
                     <div className="space-y-2">
                       <Label htmlFor="phone">Phone Number</Label>
-                      <Input id="phone" name="phone" type="tel" placeholder="+94 XX XXX XXXX" />
+                      <Input id="phone" name="phone" type="tel" placeholder="+94 XX XXX XXXX" disabled={sending} />
                     </div>
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="email">Email Address *</Label>
-                    <Input id="email" name="email" type="email" placeholder="your@email.com" required />
+                    <Input id="email" name="email" type="email" placeholder="your@email.com" required disabled={sending} />
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="subject">Subject *</Label>
-                    <Input id="subject" name="subject" placeholder="e.g. Quote for ceiling installation" required />
+                    <Input id="subject" name="subject" placeholder="e.g. Quote for ceiling installation" required disabled={sending} />
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="message">Message *</Label>
-                    <Textarea id="message" name="message" rows={5} placeholder="Tell us about your project..." required />
+                    <Textarea id="message" name="message" rows={5} placeholder="Tell us about your project..." required disabled={sending} />
                   </div>
                   <Button
                     type="submit"

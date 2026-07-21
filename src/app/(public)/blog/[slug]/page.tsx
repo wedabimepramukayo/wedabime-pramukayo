@@ -6,6 +6,7 @@ import { db } from "@/lib/db";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeft, Calendar, User, Tag } from "lucide-react";
+import { Breadcrumbs } from "@/components/public/breadcrumbs";
 
 export const revalidate = 60;
 
@@ -37,6 +38,7 @@ export default async function BlogPostPage({ params }: { params: Promise<{ slug:
 
   return (
     <div>
+      <Breadcrumbs items={[{ label: "Blog", href: "/blog" }, { label: post.title }]} />
       {/* Hero */}
       <section className="relative py-16 text-white" style={{ background: "linear-gradient(135deg, #1B4332 0%, #2D6A4F 60%, #40916C 100%)" }}>
         <div className="relative max-w-4xl mx-auto px-4">

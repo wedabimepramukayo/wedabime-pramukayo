@@ -6,6 +6,7 @@
 import { db } from "@/lib/db";
 import Link from "next/link";
 import { ArrowRight, CheckCircle, Star, Filter } from "lucide-react";
+import { Breadcrumbs } from "@/components/public/breadcrumbs";
 
 export const revalidate = 60;
 
@@ -48,6 +49,7 @@ export default async function ServicesPage({
 
   return (
     <div>
+      <Breadcrumbs items={[{ label: "Services", href: "/services" }, ...(activeCategory ? [{ label: activeCategory.name }] : [])]} />
       {/* Hero */}
       <section
         className="relative py-20 text-white"

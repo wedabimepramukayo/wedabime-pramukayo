@@ -6,6 +6,7 @@
 import { db } from "@/lib/db";
 import Link from "next/link";
 import { ArrowRight, Eye, Target, Heart, Zap, TreePine, Shield, Users } from "lucide-react";
+import { Breadcrumbs } from "@/components/public/breadcrumbs";
 
 export const revalidate = 60;
 
@@ -41,6 +42,7 @@ export default async function AboutPage() {
 
   return (
     <div>
+      <Breadcrumbs items={[{ label: "About Us" }]} />
       {/* Hero */}
       <section
         className="relative py-20 text-white"

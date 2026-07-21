@@ -3,6 +3,7 @@
 /**
  * Public Site Header — Wedabime Pramukayo
  * Sticky navigation with brand logo, menu links, and CTA button
+ * Contact info (phone, email) pulled dynamically from CMS settings
  */
 
 import Link from "next/link";
@@ -12,8 +13,9 @@ import {
   X,
   Phone,
   TreePine,
+  Mail,
 } from "lucide-react";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
 const navLinks = [
   { label: "Home", href: "/" },
@@ -24,12 +26,43 @@ const navLinks = [
   { label: "Contact", href: "/contact" },
 ];
 
+interface PublicSettings {
+  contact?: {
+    phone?: string;
+    email?: string;
+    address?: string;
+    business_hours?: string;
+  };
+  social?: {
+    whatsapp?: string;
+    facebook?: string;
+    instagram?: string;
+    youtube?: string;
+  };
+}
+
 export function PublicHeader() {
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [settings, setSettings] = useState<PublicSettings>({});
+  const [scrolled, setScrolled] = useState(false);
+
+  useEffect(() => {
+    fetch("/api/public/settings")
+      .then((r) => r.json())
+      .then((data) => setSettings(data.settings || {}))
+      .catch(() => {});
+
+    const handleScroll = () => setScrolled(window.scrollY > 10);
+    window.addEventListener("scroll", handleScroll, { passive: true });
+    return () => window.removeEventListener("scroll", handleScroll);
+  }, []);
+
+  const phone = settings.contact?.phone;
+  const email = settings.contact?.email;
 
   return (
-    <header className="sticky top-0 z-50 bg-white/95 backdrop-blur-md border-b border-brand-emerald/10 shadow-sm">
-      {/* Top bar — eco stats */}
+    <header className={`sticky top-0 z-50 bg-white/95 backdrop-blur-md border-b border-brand-emerald/10 transition-shadow ${scrolled ? "shadow-md" : "shadow-sm"}`}>
+      {/* Top bar — eco stats & contact */}
       <div className="bg-brand-dark text-brand-sage/80 text-xs py-1.5">
         <div className="max-w-7xl mx-auto px-4 flex items-center justify-between">
           <div className="flex items-center gap-4">
@@ -42,13 +75,26 @@ export function PublicHeader() {
               Up to <strong className="text-brand-gold">15 years warranty</strong>
             </span>
           </div>
-          <a
-            href="tel:+94"
-            className="flex items-center gap-1 hover:text-white transition-colors"
-          >
-            <Phone className="h-3 w-3" />
-            <span className="hidden sm:inline">Call Us</span>
-          </a>
+          <div className="flex items-center gap-4">
+            {phone && (
+              <a
+                href={`tel:${phone.replace(/[^0-9+]/g, "")}`}
+                className="flex items-center gap-1 hover:text-white transition-colors"
+              >
+                <Phone className="h-3 w-3" />
+                <span className="hidden sm:inline">{phone}</span>
+              </a>
+            )}
+            {email && (
+              <a
+                href={`mailto:${email}`}
+                className="hidden md:flex items-center gap-1 hover:text-white transition-colors"
+              >
+                <Mail className="h-3 w-3" />
+                <span>{email}</span>
+              </a>
+            )}
+          </div>
         </div>
       </div>
 
@@ -100,6 +146,7 @@ export function PublicHeader() {
             <button
               className="md:hidden p-2 rounded-lg hover:bg-brand-mint/30 transition-colors"
               onClick={() => setMobileOpen(!mobileOpen)}
+              aria-label="Toggle navigation menu"
             >
               {mobileOpen ? (
                 <X className="h-5 w-5 text-foreground" />
@@ -113,7 +160,7 @@ export function PublicHeader() {
 
       {/* Mobile Navigation */}
       {mobileOpen && (
-        <div className="md:hidden border-t border-brand-emerald/10 bg-white">
+        <div className="md:hidden border-t border-brand-emerald/10 bg-white animate-in slide-in-from-top-2 duration-200">
           <nav className="px-4 py-3 space-y-1">
             {navLinks.map((link) => (
               <Link
@@ -125,13 +172,25 @@ export function PublicHeader() {
                 {link.label}
               </Link>
             ))}
-            <Link
-              href="/contact"
-              className="block px-3 py-2.5 text-sm font-semibold text-white bg-brand-primary rounded-lg text-center mt-2"
-              onClick={() => setMobileOpen(false)}
-            >
-              Get a Quote
-            </Link>
+            <div className="pt-2 space-y-2">
+              <Link
+                href="/contact"
+                className="block px-3 py-2.5 text-sm font-semibold text-white bg-brand-primary rounded-lg text-center"
+                onClick={() => setMobileOpen(false)}
+              >
+                Get a Quote
+              </Link>
+              {phone && (
+                <a
+                  href={`tel:${phone.replace(/[^0-9+]/g, "")}`}
+                  className="flex items-center gap-2 px-3 py-2.5 text-sm font-medium text-brand-primary hover:bg-brand-mint/20 rounded-lg transition-all"
+                  onClick={() => setMobileOpen(false)}
+                >
+                  <Phone className="h-4 w-4" />
+                  Call Us: {phone}
+                </a>
+              )}
+            </div>
           </nav>
         </div>
       )}

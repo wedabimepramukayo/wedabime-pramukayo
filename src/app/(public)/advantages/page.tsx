@@ -6,6 +6,7 @@
 import { db } from "@/lib/db";
 import Link from "next/link";
 import { ArrowRight, Droplets, Flame, Bug, Wrench, Shield, TreePine, Clock, Award, ThumbsUp } from "lucide-react";
+import { Breadcrumbs } from "@/components/public/breadcrumbs";
 
 export const revalidate = 60;
 
@@ -34,6 +35,7 @@ export default async function AdvantagesPage() {
 
   return (
     <div>
+      <Breadcrumbs items={[{ label: "Advantages" }]} />
       {/* Hero */}
       <section className="relative py-20 text-white" style={{ background: "linear-gradient(135deg, #1B4332 0%, #2D6A4F 60%, #40916C 100%)" }}>
         <div className="absolute inset-0 opacity-10">
