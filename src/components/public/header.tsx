@@ -1,0 +1,140 @@
+"use client";
+
+/**
+ * Public Site Header — Wedabime Pramukayo
+ * Sticky navigation with brand logo, menu links, and CTA button
+ */
+
+import Link from "next/link";
+import Image from "next/image";
+import {
+  Menu,
+  X,
+  Phone,
+  TreePine,
+} from "lucide-react";
+import { useState } from "react";
+
+const navLinks = [
+  { label: "Home", href: "/" },
+  { label: "About", href: "/about" },
+  { label: "Services", href: "/services" },
+  { label: "Advantages", href: "/advantages" },
+  { label: "Blog", href: "/blog" },
+  { label: "Contact", href: "/contact" },
+];
+
+export function PublicHeader() {
+  const [mobileOpen, setMobileOpen] = useState(false);
+
+  return (
+    <header className="sticky top-0 z-50 bg-white/95 backdrop-blur-md border-b border-brand-emerald/10 shadow-sm">
+      {/* Top bar — eco stats */}
+      <div className="bg-brand-dark text-brand-sage/80 text-xs py-1.5">
+        <div className="max-w-7xl mx-auto px-4 flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <span className="flex items-center gap-1.5">
+              <TreePine className="h-3 w-3 text-brand-spring" />
+              1,875+ trees saved monthly
+            </span>
+            <span className="hidden sm:inline">|</span>
+            <span className="hidden sm:flex items-center gap-1.5">
+              Up to <strong className="text-brand-gold">15 years warranty</strong>
+            </span>
+          </div>
+          <a
+            href="tel:+94"
+            className="flex items-center gap-1 hover:text-white transition-colors"
+          >
+            <Phone className="h-3 w-3" />
+            <span className="hidden sm:inline">Call Us</span>
+          </a>
+        </div>
+      </div>
+
+      {/* Main nav */}
+      <div className="max-w-7xl mx-auto px-4">
+        <div className="flex items-center justify-between h-16">
+          {/* Logo */}
+          <Link href="/" className="flex items-center gap-3 group">
+            <div className="relative h-10 w-10 rounded-lg overflow-hidden ring-1 ring-brand-emerald/20 group-hover:ring-brand-spring/40 transition-all">
+              <Image
+                src="/logo.png"
+                alt="Wedabime Pramukayo"
+                fill
+                className="object-contain"
+                priority
+              />
+            </div>
+            <div>
+              <div className="font-bold text-brand-primary text-sm leading-tight">
+                Wedabime Pramukayo
+              </div>
+              <div className="text-[10px] text-brand-emerald leading-tight">
+                Premium i-Panel Solutions
+              </div>
+            </div>
+          </Link>
+
+          {/* Desktop Navigation */}
+          <nav className="hidden md:flex items-center gap-1">
+            {navLinks.map((link) => (
+              <Link
+                key={link.href}
+                href={link.href}
+                className="px-3 py-2 text-sm font-medium text-foreground/70 hover:text-brand-primary hover:bg-brand-mint/30 rounded-lg transition-all"
+              >
+                {link.label}
+              </Link>
+            ))}
+          </nav>
+
+          {/* CTA + Mobile Toggle */}
+          <div className="flex items-center gap-3">
+            <Link
+              href="/contact"
+              className="hidden md:inline-flex items-center gap-2 px-5 py-2.5 bg-brand-primary text-white text-sm font-semibold rounded-lg hover:bg-brand-primary/90 transition-colors shadow-sm"
+            >
+              Get a Quote
+            </Link>
+            <button
+              className="md:hidden p-2 rounded-lg hover:bg-brand-mint/30 transition-colors"
+              onClick={() => setMobileOpen(!mobileOpen)}
+            >
+              {mobileOpen ? (
+                <X className="h-5 w-5 text-foreground" />
+              ) : (
+                <Menu className="h-5 w-5 text-foreground" />
+              )}
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Mobile Navigation */}
+      {mobileOpen && (
+        <div className="md:hidden border-t border-brand-emerald/10 bg-white">
+          <nav className="px-4 py-3 space-y-1">
+            {navLinks.map((link) => (
+              <Link
+                key={link.href}
+                href={link.href}
+                className="block px-3 py-2.5 text-sm font-medium text-foreground/70 hover:text-brand-primary hover:bg-brand-mint/20 rounded-lg transition-all"
+                onClick={() => setMobileOpen(false)}
+              >
+                {link.label}
+              </Link>
+            ))}
+            <Link
+              href="/contact"
+              className="block px-3 py-2.5 text-sm font-semibold text-white bg-brand-primary rounded-lg text-center mt-2"
+              onClick={() => setMobileOpen(false)}
+            >
+              Get a Quote
+            </Link>
+          </nav>
+        </div>
+      )}
+    </header>
+  );
+}

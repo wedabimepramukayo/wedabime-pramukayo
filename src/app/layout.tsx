@@ -14,10 +14,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: {
-    default: "Wedabime Pramukayo | Premium i-Panel & Home Improvement Solutions Sri Lanka",
-    template: "%s | Wedabime Pramukayo",
-  },
+  title: "Wedabime Pramukayo | Premium i-Panel & Home Improvement Solutions Sri Lanka",
   description:
     "Wedabime Pramukayo - Sri Lanka's trusted provider of premium i-Panel ceiling systems, wall cladding, and roofing solutions. Fire-retardant, waterproof, termite-proof with up to 15 years warranty.",
   keywords: [
