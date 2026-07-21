@@ -20,6 +20,7 @@ import {
   ArrowRight,
   Eye,
   Award,
+  Inbox,
 } from "lucide-react";
 import Link from "next/link";
 
@@ -37,8 +38,10 @@ export default async function AdminDashboard() {
     publishedPages,
     publishedServices,
     publishedPosts,
+    unreadMessages,
     recentServices,
     recentPosts,
+    recentMessages,
   ] = await Promise.all([
     db.page.count(),
     db.product.count(),
@@ -48,6 +51,7 @@ export default async function AdminDashboard() {
     db.page.count({ where: { isPublished: true } }),
     db.product.count({ where: { isPublished: true } }),
     db.blogPost.count({ where: { isPublished: true } }),
+    db.contactSubmission.count({ where: { isRead: false } }),
     db.product.findMany({
       take: 5,
       orderBy: { updatedAt: "desc" },
@@ -57,6 +61,12 @@ export default async function AdminDashboard() {
       take: 5,
       orderBy: { updatedAt: "desc" },
       select: { id: true, title: true, slug: true, isPublished: true, updatedAt: true },
+    }),
+    db.contactSubmission.findMany({
+      take: 5,
+      where: { isRead: false },
+      orderBy: { createdAt: "desc" },
+      select: { id: true, name: true, subject: true, createdAt: true },
     }),
   ]);
 
@@ -96,6 +106,15 @@ export default async function AdminDashboard() {
       href: "/admin/blog",
       color: "text-brand-gold",
       bg: "bg-brand-gold/10",
+    },
+    {
+      title: "Messages",
+      value: unreadMessages,
+      published: unreadMessages,
+      icon: Inbox,
+      href: "/admin/messages",
+      color: "text-brand-spring",
+      bg: "bg-brand-spring/10",
     },
   ];
 
@@ -167,7 +186,7 @@ export default async function AdminDashboard() {
       </div>
 
       {/* Stats Cards Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
         {statsCards.map((stat) => {
           const Icon = stat.icon;
           return (
@@ -187,7 +206,7 @@ export default async function AdminDashboard() {
                 <div className="text-sm text-muted-foreground">{stat.title}</div>
               </div>
               <div className="mt-2 text-xs text-brand-emerald">
-                {stat.published} published
+                {stat.title === "Messages" ? `${stat.published} unread` : `${stat.published} published`}
               </div>
             </Link>
           );
@@ -195,7 +214,7 @@ export default async function AdminDashboard() {
       </div>
 
       {/* Recent Activity */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Recent Projects */}
         <div className="rounded-xl border border-brand-emerald/10 bg-white p-6">
           <div className="flex items-center justify-between mb-4">
@@ -289,12 +308,50 @@ export default async function AdminDashboard() {
             )}
           </div>
         </div>
+
+        {/* Recent Messages */}
+        <div className="rounded-xl border border-brand-emerald/10 bg-white p-6">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-lg font-semibold text-foreground">New Messages</h2>
+            <Link
+              href="/admin/messages"
+              className="text-sm text-brand-primary hover:text-brand-emerald flex items-center gap-1 transition-colors"
+            >
+              View all <ArrowRight className="h-3 w-3" />
+            </Link>
+          </div>
+          <div className="space-y-3">
+            {recentMessages.length === 0 ? (
+              <p className="text-sm text-muted-foreground py-4 text-center">No new messages</p>
+            ) : (
+              recentMessages.map((msg) => (
+                <div
+                  key={msg.id}
+                  className="flex items-center justify-between p-3 rounded-lg bg-brand-spring/5 hover:bg-brand-spring/10 transition-colors border border-brand-spring/10"
+                >
+                  <div className="min-w-0">
+                    <div className="text-sm font-medium text-foreground truncate">
+                      {msg.name}
+                    </div>
+                    <div className="text-xs text-muted-foreground truncate">
+                      {msg.subject}
+                    </div>
+                  </div>
+                  <span className="text-[10px] text-muted-foreground flex items-center gap-1 flex-shrink-0">
+                    <Clock className="h-3 w-3" />
+                    {new Date(msg.createdAt).toLocaleDateString()}
+                  </span>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
       </div>
 
       {/* Quick Actions */}
       <div className="rounded-xl border border-brand-emerald/10 bg-white p-6">
         <h2 className="text-lg font-semibold text-foreground mb-4">Quick Actions</h2>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
           <Link
             href="/admin/pages"
             className="flex items-center gap-3 p-4 rounded-lg border border-brand-emerald/10 hover:border-brand-emerald/30 hover:bg-brand-mint/20 transition-all"
@@ -317,11 +374,19 @@ export default async function AdminDashboard() {
             <span className="text-sm font-medium text-foreground">Write Post</span>
           </Link>
           <Link
-            href="/admin/settings"
+            href="/admin/messages"
             className="flex items-center gap-3 p-4 rounded-lg border border-brand-emerald/10 hover:border-brand-emerald/30 hover:bg-brand-mint/20 transition-all"
           >
-            <Settings className="h-5 w-5 text-brand-teal" />
-            <span className="text-sm font-medium text-foreground">Site Settings</span>
+            <Inbox className="h-5 w-5 text-brand-spring" />
+            <span className="text-sm font-medium text-foreground">Messages</span>
+          </Link>
+          <Link
+            href="/"
+            target="_blank"
+            className="flex items-center gap-3 p-4 rounded-lg border border-brand-emerald/10 hover:border-brand-emerald/30 hover:bg-brand-mint/20 transition-all"
+          >
+            <Eye className="h-5 w-5 text-brand-teal" />
+            <span className="text-sm font-medium text-foreground">View Site</span>
           </Link>
         </div>
       </div>

@@ -129,3 +129,18 @@ model Media {
   uploadedBy  String?   // User ID
   createdAt   DateTime  @default(now())
 }
+
+// ─── CONTACT FORM SUBMISSIONS ──────────────────────────────────
+model ContactSubmission {
+  id          String    @id @default(cuid())
+  name        String
+  email       String
+  phone       String?   // Optional phone number
+  subject     String
+  message     String
+  isRead      Boolean   @default(false)
+  isReplied   Boolean   @default(false)
+  repliedAt   DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+}

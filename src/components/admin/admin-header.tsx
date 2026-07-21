@@ -6,7 +6,7 @@
  */
 
 import { useSession } from "next-auth/react";
-import { Bell, Search, User, Shield } from "lucide-react";
+import { Bell, Search, User, Shield, Inbox } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import {
@@ -52,15 +52,16 @@ export function AdminHeader({ user }: AdminHeaderProps) {
 
         {/* Right: Actions & User */}
         <div className="flex items-center gap-3">
-          {/* Notifications */}
-          <Button
-            variant="ghost"
-            size="icon"
-            className="relative text-muted-foreground hover:text-brand-primary"
-          >
-            <Bell className="h-5 w-5" />
-            <span className="absolute -top-0.5 -right-0.5 h-3 w-3 bg-brand-spring rounded-full border-2 border-white" />
-          </Button>
+          {/* Messages */}
+          <a href="/admin/messages">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="relative text-muted-foreground hover:text-brand-primary"
+            >
+              <Inbox className="h-5 w-5" />
+            </Button>
+          </a>
 
           {/* Role Badge */}
           <Badge

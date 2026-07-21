@@ -1,10 +1,11 @@
 /**
  * Contact Form API — Wedabime Pramukayo
- * Receives contact form submissions and stores/logs them
+ * Receives contact form submissions, validates them, and stores in DB
  * Can be extended with email integration (Resend, SendGrid, etc.)
  */
 
 import { NextRequest, NextResponse } from "next/server";
+import { db } from "@/lib/db";
 
 export async function POST(req: NextRequest) {
   try {
@@ -36,18 +37,27 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Log the submission (in production, you'd send an email or store in DB)
+    // Store in database
+    const submission = await db.contactSubmission.create({
+      data: {
+        name: name.trim(),
+        email: email.trim().toLowerCase(),
+        phone: phone?.trim() || null,
+        subject: subject.trim(),
+        message: message.trim(),
+      },
+    });
+
+    // Log for monitoring
     console.log("📧 New Contact Form Submission:", {
-      name,
-      email,
-      phone: phone || "N/A",
-      subject,
-      message: message.substring(0, 200) + (message.length > 200 ? "..." : ""),
-      timestamp: new Date().toISOString(),
+      id: submission.id,
+      name: submission.name,
+      email: submission.email,
+      subject: submission.subject,
+      timestamp: submission.createdAt.toISOString(),
     });
 
     // TODO: Integrate with email service (Resend, SendGrid, Nodemailer, etc.)
-    // Example with Resend:
     // await resend.emails.send({
     //   from: 'website@wedabimepramukayo.site',
     //   to: 'info@wedabimepramukayo.site',
