@@ -17,6 +17,9 @@ node_modules
 /.next/
 /out/
 
+# opennext cloudflare build output
+.open-next/
+
 # production
 /build
 
@@ -33,6 +36,7 @@ yarn-error.log*
 # env files (NEVER commit — contains Cloudinary & auth secrets)
 .env*
 !.env.example
+.dev.vars
 
 # database files — use migrations, not binary data
 db/*.db

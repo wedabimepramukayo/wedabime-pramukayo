@@ -1,7 +1,6 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  // output: "standalone" — only needed for Docker/self-hosted, NOT for Vercel
   typescript: {
     ignoreBuildErrors: true,
   },
@@ -22,20 +21,8 @@ const nextConfig: NextConfig = {
       },
     ],
   },
-  // Headers for security
-  async headers() {
-    return [
-      {
-        source: "/(.*)",
-        headers: [
-          { key: "X-Frame-Options", value: "DENY" },
-          { key: "X-Content-Type-Options", value: "nosniff" },
-          { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
-          { key: "X-XSS-Protection", value: "1; mode=block" },
-        ],
-      },
-    ];
-  },
+  // Security headers moved to public/_headers for Cloudflare Pages compatibility
+  // (next.config.ts headers() uses Node.js middleware which is not supported on Cloudflare)
 };
 
 export default nextConfig;

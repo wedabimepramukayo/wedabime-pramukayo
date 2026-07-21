@@ -1,9 +1,10 @@
 // Wedabime Pramukayo CMS - Database Schema
-// PostgreSQL for production (Neon) — development can use local PostgreSQL or Neon
+// PostgreSQL via Neon (serverless driver for Cloudflare Pages compatibility)
 // Cloudinary for image storage (only URLs stored in DB)
 
 generator client {
-  provider = "prisma-client-js"
+  provider        = "prisma-client-js"
+  previewFeatures = ["driverAdapters"]
 }
 
 datasource db {
