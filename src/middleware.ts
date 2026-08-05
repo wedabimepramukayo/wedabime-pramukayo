@@ -38,8 +38,8 @@ function decodeJwtPayload(token: string): Record<string, unknown> | null {
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
-  // Allow access to login page without authentication
-  if (pathname === "/admin/login") {
+  // Allow access to login and register pages without authentication
+  if (pathname === "/admin/login" || pathname === "/admin/register") {
     // Check if user is already logged in
     const token = request.cookies.get("next-auth.session-token")?.value ||
                   request.cookies.get("__Secure-next-auth.session-token")?.value;
