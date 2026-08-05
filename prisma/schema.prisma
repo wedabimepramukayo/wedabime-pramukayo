@@ -5,7 +5,9 @@
 generator client {
   provider        = "prisma-client-js"
   previewFeatures = ["driverAdapters"]
-  binaryTargets   = ["native", "debian-openssl-1.1.x"]
+  // No binaryTargets needed — using PrismaNeonHttp adapter which replaces the native query engine
+  // On Cloudflare Workers (V8 isolates), native engines can't run
+  // The adapter sends queries via Neon HTTP API instead
 }
 
 datasource db {
