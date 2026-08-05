@@ -3,16 +3,15 @@
 // Cloudinary for image storage (only URLs stored in DB)
 
 generator client {
-  provider        = "prisma-client-js"
-  previewFeatures = ["driverAdapters"]
-  // No binaryTargets needed — using PrismaNeonHttp adapter which replaces the native query engine
-  // On Cloudflare Workers (V8 isolates), native engines can't run
-  // The adapter sends queries via Neon HTTP API instead
+  provider = "prisma-client-js"
+  // No binaryTargets — using PrismaNeonHttp adapter (Neon HTTP API)
+  // No previewFeatures needed — driverAdapters is stable in Prisma 7
 }
 
 datasource db {
   provider = "postgresql"
-  url      = env("DATABASE_URL")
+  // URL is configured in prisma.config.ts for migrations
+  // At runtime, PrismaNeonHttp adapter handles the connection
 }
 
 // ─── ADMIN USERS ───────────────────────────────────────────────
