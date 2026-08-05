@@ -9,7 +9,8 @@ import CredentialsProvider from "next-auth/providers/credentials";
 import bcrypt from "bcryptjs";
 import { db } from "@/lib/db";
 
-// Validate AUTH_SECRET at module load time to prevent silent security issues
+// Validate AUTH_SECRET to prevent silent security issues
+// Skip during Next.js build phase (secrets not available at build time)
 const PLACEHOLDER_SECRETS = [
   "your-secret-key-here-change-this",
   "change-me",
@@ -17,7 +18,9 @@ const PLACEHOLDER_SECRETS = [
   "",
 ];
 
-if (!process.env.AUTH_SECRET || PLACEHOLDER_SECRETS.includes(process.env.AUTH_SECRET)) {
+const isBuildPhase = process.env.NEXT_PHASE?.includes("build");
+
+if (!isBuildPhase && (!process.env.AUTH_SECRET || PLACEHOLDER_SECRETS.includes(process.env.AUTH_SECRET))) {
   if (process.env.NODE_ENV === "production") {
     throw new Error(
       "AUTH_SECRET environment variable must be set to a secure random value in production. " +
