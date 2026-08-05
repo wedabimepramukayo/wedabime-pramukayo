@@ -7,7 +7,15 @@
 import { NextAuthOptions } from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
 import bcrypt from "bcryptjs";
-import { db } from "@/lib/db";
+import { neon } from "@neondatabase/serverless";
+
+// Helper: get Neon SQL function (lightweight HTTP client, no Prisma engine)
+function getSql() {
+  if (!process.env.DATABASE_URL) {
+    throw new Error("DATABASE_URL is not configured");
+  }
+  return neon(process.env.DATABASE_URL);
+}
 
 // Validate AUTH_SECRET to prevent silent security issues
 // Skip during Next.js build phase (secrets not available at build time)
@@ -55,10 +63,14 @@ export const authOptions: NextAuthOptions = {
           throw new Error("Email and password are required");
         }
 
-        // Find user in database
-        const user = await db.user.findUnique({
-          where: { email: credentials.email },
-        });
+        // Find user in database using Neon directly (no Prisma engine)
+        const sql = getSql();
+        const result = await sql`
+          SELECT id, email, name, role, "isActive", "passwordHash"
+          FROM "User"
+          WHERE email = ${credentials.email}
+        `;
+        const user = result[0];
 
         if (!user) {
           throw new Error("Invalid email or password");
@@ -80,10 +92,9 @@ export const authOptions: NextAuthOptions = {
         }
 
         // Update last login timestamp
-        await db.user.update({
-          where: { id: user.id },
-          data: { lastLoginAt: new Date() },
-        });
+        await sql`
+          UPDATE "User" SET "lastLoginAt" = NOW() WHERE id = ${user.id}
+        `;
 
         // Return user object (never include passwordHash)
         return {

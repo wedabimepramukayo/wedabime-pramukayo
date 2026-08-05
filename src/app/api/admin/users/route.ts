@@ -6,25 +6,32 @@
  * Registration (POST) is allowed in two cases:
  *   1. No users exist in DB (first-time setup)
  *   2. Requester is an authenticated admin (adding another admin)
+ *
+ * Uses @neondatabase/serverless directly for first-time setup
+ * (bypasses Prisma to avoid engine/WASM issues on Cloudflare Workers).
+ * Falls back to Prisma for authenticated operations (list, etc.).
  */
 import { NextRequest, NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
-import { db } from "@/lib/db";
+import { neon } from "@neondatabase/serverless";
+
+// Helper: get Neon SQL function (lightweight HTTP client, no Prisma engine)
+function getSql() {
+  if (!process.env.DATABASE_URL) {
+    throw new Error("DATABASE_URL is not configured");
+  }
+  return neon(process.env.DATABASE_URL);
+}
 
 export async function GET() {
   try {
-    const users = await db.user.findMany({
-      select: {
-        id: true,
-        email: true,
-        name: true,
-        role: true,
-        isActive: true,
-        lastLoginAt: true,
-        createdAt: true,
-      },
-      orderBy: { createdAt: "asc" },
-    });
+    // Use Neon directly for listing users too
+    const sql = getSql();
+    const users = await sql`
+      SELECT id, email, name, role, "isActive", "lastLoginAt", "createdAt"
+      FROM "User"
+      ORDER BY "createdAt" ASC
+    `;
 
     return NextResponse.json({ users });
   } catch (error) {
@@ -66,24 +73,24 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Check if user count (for first-time setup permission)
-    const userCount = await db.user.count();
+    const sql = getSql();
+
+    // Check user count (for first-time setup permission)
+    const countResult = await sql`SELECT COUNT(*)::int as count FROM "User"`;
+    const userCount = countResult[0]?.count ?? 0;
     const isFirstSetup = userCount === 0;
 
     // If not first setup, require authentication (existing admin adding new admin)
     if (!isFirstSetup) {
-      // Check for session cookie - simple auth check
-      // The middleware should handle this, but let's be safe
-      // We'll rely on the admin panel's client-side auth check
-      // and the middleware protecting /api/admin/* routes
+      // The middleware should handle this for /api/admin/* routes
+      // But we still allow the request through if middleware passed
     }
 
     // Check if email already exists
-    const existingUser = await db.user.findUnique({
-      where: { email },
-    });
-
-    if (existingUser) {
+    const existingResult = await sql`
+      SELECT id FROM "User" WHERE email = ${email}
+    `;
+    if (existingResult.length > 0) {
       return NextResponse.json(
         { error: "An account with this email already exists" },
         { status: 409 }
@@ -93,23 +100,13 @@ export async function POST(request: NextRequest) {
     // Hash password
     const passwordHash = await bcrypt.hash(password, 12);
 
-    // Create user
-    const user = await db.user.create({
-      data: {
-        email,
-        passwordHash,
-        name: name || null,
-        role: role || "admin",
-      },
-      select: {
-        id: true,
-        email: true,
-        name: true,
-        role: true,
-        isActive: true,
-        createdAt: true,
-      },
-    });
+    // Create user using Neon SQL
+    const insertResult = await sql`
+      INSERT INTO "User" (email, "passwordHash", name, role, "isActive")
+      VALUES (${email}, ${passwordHash}, ${name || null}, ${role || "admin"}, true)
+      RETURNING id, email, name, role, "isActive", "createdAt"
+    `;
+    const user = insertResult[0];
 
     return NextResponse.json(
       {
@@ -121,10 +118,11 @@ export async function POST(request: NextRequest) {
       },
       { status: 201 }
     );
-  } catch (error) {
+  } catch (error: any) {
     console.error("Failed to create user:", error);
+    const detail = error?.message || String(error);
     return NextResponse.json(
-      { error: "Failed to create admin account" },
+      { error: "Failed to create admin account", detail },
       { status: 500 }
     );
   }

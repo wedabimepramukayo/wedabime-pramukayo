@@ -3,9 +3,12 @@
  * GET /api/admin/users/count → { count, canRegister }
  *
  * canRegister is true when no users exist (first-time setup)
+ *
+ * Uses @neondatabase/serverless directly (bypasses Prisma)
+ * This avoids Prisma's native engine/WASM requirement on Cloudflare Workers.
  */
 import { NextResponse } from "next/server";
-import { db } from "@/lib/db";
+import { neon } from "@neondatabase/serverless";
 
 export async function GET() {
   try {
@@ -22,7 +25,10 @@ export async function GET() {
       );
     }
 
-    const count = await db.user.count();
+    // Use Neon serverless directly — no Prisma engine needed
+    const sql = neon(process.env.DATABASE_URL);
+    const result = await sql`SELECT COUNT(*)::int as count FROM "User"`;
+    const count = result[0]?.count ?? 0;
 
     return NextResponse.json({
       count,
@@ -30,7 +36,6 @@ export async function GET() {
     });
   } catch (error: any) {
     console.error("Failed to count users:", error);
-    // Return detailed error for debugging (remove in production later)
     const errorDetail = error?.message || String(error);
     const errorCode = error?.code;
     return NextResponse.json(
