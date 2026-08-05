@@ -14,11 +14,19 @@ import { Breadcrumbs } from "@/components/public/breadcrumbs";
 export const revalidate = 60;
 
 export async function generateMetadata() {
-  const page = await db.page.findUnique({ where: { slug: "advantages" } });
-  return {
-    title: page?.metaTitle || "Advantages | Why Choose i-Panel",
-    description: page?.metaDesc || "Discover why i-Panel is the smartest choice — waterproof, fire-retardant, termite-proof, maintenance-free.",
-  };
+  try {
+    const page = await db.page.findUnique({ where: { slug: "advantages" } });
+    return {
+      title: page?.metaTitle || "Advantages | Why Choose i-Panel",
+      description: page?.metaDesc || "Discover why i-Panel is the smartest choice — waterproof, fire-retardant, termite-proof, maintenance-free.",
+    };
+  } catch (error) {
+    console.error("Failed to fetch advantages metadata:", error);
+    return {
+      title: "Advantages | Why Choose i-Panel",
+      description: "Discover why i-Panel is the smartest choice — waterproof, fire-retardant, termite-proof, maintenance-free.",
+    };
+  }
 }
 
 const advantageCards = [
@@ -34,7 +42,13 @@ const advantageCards = [
 ];
 
 export default async function AdvantagesPage() {
-  const page = await db.page.findUnique({ where: { slug: "advantages" } });
+  let page: any = null;
+  try {
+    page = await db.page.findUnique({ where: { slug: "advantages" } });
+  } catch (error) {
+    console.error("Failed to fetch advantages page data:", error);
+    page = null as any;
+  }
 
   return (
     <div>

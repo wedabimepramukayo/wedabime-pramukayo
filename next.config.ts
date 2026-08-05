@@ -5,6 +5,8 @@ const nextConfig: NextConfig = {
     ignoreBuildErrors: true,
   },
   reactStrictMode: true,
+  // Force webpack instead of Turbopack (Turbopack causes SIGBUS on this system)
+  bundler: "webpack",
   images: {
     remotePatterns: [
       {

@@ -12,7 +12,7 @@
  * Lazy initialization via Proxy prevents DATABASE_URL errors during `next build`.
  */
 
-import { PrismaNeonHttp } from '@prisma/adapter-neon'
+import { PrismaNeonHTTP } from '@prisma/adapter-neon'
 import { PrismaClient } from '@prisma/client/edge'
 import { neon } from '@neondatabase/serverless'
 
@@ -21,10 +21,10 @@ const globalForPrisma = globalThis as unknown as {
 }
 
 function createPrismaClient(): PrismaClient {
-  // PrismaNeonHttp takes the connectionString directly
+  // PrismaNeonHTTP takes the connectionString directly
   // It internally uses neon() HTTP driver to send queries over HTTPS
   // No WebSocket or native binary engine needed
-  const adapter = new PrismaNeonHttp(process.env.DATABASE_URL!, {
+  const adapter = new PrismaNeonHTTP(process.env.DATABASE_URL!, {
     poolQueryViaFetch: true,
   })
   return new PrismaClient({

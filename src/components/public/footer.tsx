@@ -40,18 +40,23 @@ const quickLinks = [
 export const revalidate = 300;
 
 async function getFooterData() {
-  const settings = await db.siteSetting.findMany({
-    where: { isPublic: true },
-    select: { key: true, value: true, category: true },
-  });
+  try {
+    const settings = await db.siteSetting.findMany({
+      where: { isPublic: true },
+      select: { key: true, value: true, category: true },
+    });
 
-  const grouped: Record<string, Record<string, string>> = {};
-  settings.forEach((s) => {
-    if (!grouped[s.category]) grouped[s.category] = {};
-    grouped[s.category][s.key] = s.value;
-  });
+    const grouped: Record<string, Record<string, string>> = {};
+    settings.forEach((s) => {
+      if (!grouped[s.category]) grouped[s.category] = {};
+      grouped[s.category][s.key] = s.value;
+    });
 
-  return { settings: grouped };
+    return { settings: grouped };
+  } catch (error) {
+    console.error("Footer data fetch error:", error);
+    return { settings: {} as Record<string, Record<string, string>> };
+  }
 }
 
 export async function PublicFooter() {

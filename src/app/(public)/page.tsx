@@ -25,26 +25,31 @@ import {
 export const revalidate = 60; // Revalidate every 60 seconds
 
 async function getHomeData() {
-  const [pages, featuredServices, categories, settings] = await Promise.all([
-    db.page.findUnique({ where: { slug: "home" } }),
-    db.product.findMany({
-      where: { isPublished: true, isFeatured: true },
-      orderBy: { sortOrder: "asc" },
-      take: 4,
-      include: { category: { select: { name: true, slug: true } } },
-    }),
-    db.productCategory.findMany({
-      where: { isActive: true },
-      orderBy: { sortOrder: "asc" },
-      include: { _count: { select: { products: true } } },
-    }),
-    db.siteSetting.findMany({ where: { category: "general" } }),
-  ]);
+  try {
+    const [pages, featuredServices, categories, settings] = await Promise.all([
+      db.page.findUnique({ where: { slug: "home" } }),
+      db.product.findMany({
+        where: { isPublished: true, isFeatured: true },
+        orderBy: { sortOrder: "asc" },
+        take: 4,
+        include: { category: { select: { name: true, slug: true } } },
+      }),
+      db.productCategory.findMany({
+        where: { isActive: true },
+        orderBy: { sortOrder: "asc" },
+        include: { _count: { select: { products: true } } },
+      }),
+      db.siteSetting.findMany({ where: { category: "general" } }),
+    ]);
 
-  const settingsMap: Record<string, string> = {};
-  settings.forEach((s) => { settingsMap[s.key] = s.value; });
+    const settingsMap: Record<string, string> = {};
+    settings.forEach((s) => { settingsMap[s.key] = s.value; });
 
-  return { pages, featuredServices, categories, settingsMap };
+    return { pages, featuredServices, categories, settingsMap };
+  } catch (error) {
+    console.error("Homepage data fetch error:", error);
+    return { pages: null as any, featuredServices: [] as any[], categories: [] as any[], settingsMap: {} as Record<string, string> };
+  }
 }
 
 const advantages = [

@@ -14,16 +14,29 @@ import { Breadcrumbs } from "@/components/public/breadcrumbs";
 export const revalidate = 60;
 
 async function getAboutData() {
-  const page = await db.page.findUnique({ where: { slug: "about" } });
-  return { page };
+  try {
+    const page = await db.page.findUnique({ where: { slug: "about" } });
+    return { page };
+  } catch (error) {
+    console.error("Failed to fetch about page data:", error);
+    return { page: null } as any;
+  }
 }
 
 export async function generateMetadata() {
-  const page = await db.page.findUnique({ where: { slug: "about" } });
-  return {
-    title: page?.metaTitle || "About Us",
-    description: page?.metaDesc || "Learn about Wedabime Pramukayo — Sri Lanka's trusted construction solutions provider.",
-  };
+  try {
+    const page = await db.page.findUnique({ where: { slug: "about" } });
+    return {
+      title: page?.metaTitle || "About Us",
+      description: page?.metaDesc || "Learn about Wedabime Pramukayo — Sri Lanka's trusted construction solutions provider.",
+    };
+  } catch (error) {
+    console.error("Failed to fetch about metadata:", error);
+    return {
+      title: "About Us",
+      description: "Learn about Wedabime Pramukayo — Sri Lanka's trusted construction solutions provider.",
+    };
+  }
 }
 
 const values = [

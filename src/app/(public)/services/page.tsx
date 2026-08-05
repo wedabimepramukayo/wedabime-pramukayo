@@ -14,30 +14,43 @@ import { Breadcrumbs } from "@/components/public/breadcrumbs";
 export const revalidate = 60;
 
 async function getServicesData(categorySlug?: string) {
-  const [categories, services] = await Promise.all([
-    db.productCategory.findMany({
-      where: { isActive: true },
-      orderBy: { sortOrder: "asc" },
-      include: { _count: { select: { products: true } } },
-    }),
-    db.product.findMany({
-      where: {
-        isPublished: true,
-        ...(categorySlug ? { category: { slug: categorySlug } } : {}),
-      },
-      orderBy: { sortOrder: "asc" },
-      include: { category: { select: { name: true, slug: true } } },
-    }),
-  ]);
-  return { categories, services };
+  try {
+    const [categories, services] = await Promise.all([
+      db.productCategory.findMany({
+        where: { isActive: true },
+        orderBy: { sortOrder: "asc" },
+        include: { _count: { select: { products: true } } },
+      }),
+      db.product.findMany({
+        where: {
+          isPublished: true,
+          ...(categorySlug ? { category: { slug: categorySlug } } : {}),
+        },
+        orderBy: { sortOrder: "asc" },
+        include: { category: { select: { name: true, slug: true } } },
+      }),
+    ]);
+    return { categories, services };
+  } catch (error) {
+    console.error("Failed to fetch services data:", error);
+    return { categories: [], services: [] } as any;
+  }
 }
 
 export async function generateMetadata() {
-  const page = await db.page.findUnique({ where: { slug: "services" } });
-  return {
-    title: page?.metaTitle || "Our Services",
-    description: page?.metaDesc || "Explore our range of premium i-Panel services for Sri Lanka.",
-  };
+  try {
+    const page = await db.page.findUnique({ where: { slug: "services" } });
+    return {
+      title: page?.metaTitle || "Our Services",
+      description: page?.metaDesc || "Explore our range of premium i-Panel services for Sri Lanka.",
+    };
+  } catch (error) {
+    console.error("Failed to fetch services metadata:", error);
+    return {
+      title: "Our Services",
+      description: "Explore our range of premium i-Panel services for Sri Lanka.",
+    };
+  }
 }
 
 export default async function ServicesPage({

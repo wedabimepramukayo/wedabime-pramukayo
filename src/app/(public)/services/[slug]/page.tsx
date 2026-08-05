@@ -14,20 +14,30 @@ import { Breadcrumbs } from "@/components/public/breadcrumbs";
 export const revalidate = 60;
 
 async function getService(slug: string) {
-  return db.product.findUnique({
-    where: { slug, isPublished: true },
-    include: { category: { select: { name: true, slug: true } } },
-  });
+  try {
+    return await db.product.findUnique({
+      where: { slug, isPublished: true },
+      include: { category: { select: { name: true, slug: true } } },
+    });
+  } catch (error) {
+    console.error("Failed to fetch service:", error);
+    return null as any;
+  }
 }
 
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }) {
-  const { slug } = await params;
-  const service = await getService(slug);
-  if (!service) return { title: "Not Found" };
-  return {
-    title: service.metaTitle || `${service.name} | Wedabime Pramukayo`,
-    description: service.metaDesc || service.description.replace(/<[^>]*>/g, "").substring(0, 160),
-  };
+  try {
+    const { slug } = await params;
+    const service = await getService(slug);
+    if (!service) return { title: "Not Found" };
+    return {
+      title: service.metaTitle || `${service.name} | Wedabime Pramukayo`,
+      description: service.metaDesc || service.description.replace(/<[^>]*>/g, "").substring(0, 160),
+    };
+  } catch (error) {
+    console.error("Failed to generate service metadata:", error);
+    return { title: "Not Found" };
+  }
 }
 
 export default async function ServiceDetailPage({ params }: { params: Promise<{ slug: string }> }) {
@@ -38,11 +48,17 @@ export default async function ServiceDetailPage({ params }: { params: Promise<{ 
   const features: string[] = (() => { try { return JSON.parse(service.features); } catch { return []; } })();
   const advantages: string[] = (() => { try { return JSON.parse(service.advantages || "[]"); } catch { return []; } })();
 
-  const related = await db.product.findMany({
-    where: { isPublished: true, categoryId: service.categoryId, id: { not: service.id } },
-    take: 3, orderBy: { sortOrder: "asc" },
-    include: { category: { select: { name: true } } },
-  });
+  let related: any[] = [];
+  try {
+    related = await db.product.findMany({
+      where: { isPublished: true, categoryId: service.categoryId, id: { not: service.id } },
+      take: 3, orderBy: { sortOrder: "asc" },
+      include: { category: { select: { name: true } } },
+    });
+  } catch (error) {
+    console.error("Failed to fetch related services:", error);
+    related = [] as any;
+  }
 
   return (
     <div>
