@@ -66,8 +66,8 @@ export async function PublicFooter() {
 
   const phone = contact.phone;
   const email = contact.email;
-  const address = contact.address || "Gampaha District, Sri Lanka";
-  const hours = contact.business_hours || "Mon-Sat: 8:00 AM - 6:00 PM";
+  const address = contact.address || "";
+  const hours = contact.business_hours || "";
   const whatsapp = social.whatsapp;
 
   return (
@@ -150,10 +150,12 @@ export async function PublicFooter() {
           <div>
             <h3 className="text-sm font-semibold text-white mb-4">Contact</h3>
             <ul className="space-y-3">
-              <li className="flex items-start gap-2">
-                <MapPin className="h-4 w-4 text-brand-spring flex-shrink-0 mt-0.5" />
-                <span className="text-sm text-brand-sage/60">{address}</span>
-              </li>
+              {address && (
+                <li className="flex items-start gap-2">
+                  <MapPin className="h-4 w-4 text-brand-spring flex-shrink-0 mt-0.5" />
+                  <span className="text-sm text-brand-sage/60">{address}</span>
+                </li>
+              )}
               {phone && (
                 <li className="flex items-center gap-2">
                   <Phone className="h-4 w-4 text-brand-teal flex-shrink-0" />
@@ -176,10 +178,12 @@ export async function PublicFooter() {
                   </a>
                 </li>
               )}
-              <li className="flex items-center gap-2">
-                <Clock className="h-4 w-4 text-brand-teal flex-shrink-0" />
-                <span className="text-sm text-brand-sage/60">{hours}</span>
-              </li>
+              {hours && (
+                <li className="flex items-center gap-2">
+                  <Clock className="h-4 w-4 text-brand-teal flex-shrink-0" />
+                  <span className="text-sm text-brand-sage/60">{hours}</span>
+                </li>
+              )}
               <li className="flex items-center gap-2">
                 <Shield className="h-4 w-4 text-brand-gold flex-shrink-0" />
                 <span className="text-sm text-brand-sage/60">

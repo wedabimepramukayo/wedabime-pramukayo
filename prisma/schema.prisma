@@ -19,7 +19,7 @@ model User {
   email         String    @unique
   name          String?
   passwordHash  String    // bcrypt hashed password
-  role          String    @default("admin") // admin, editor
+  role          String    @default("editor") // admin, editor — least privilege by default
   isActive      Boolean   @default(true)
   lastLoginAt   DateTime?
   createdAt     DateTime  @default(now())

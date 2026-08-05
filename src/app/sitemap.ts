@@ -10,7 +10,7 @@ export const dynamic = 'force-dynamic';
 import { db } from "@/lib/db";
 import type { MetadataRoute } from "next";
 
-const BASE_URL = "https://wedabimepramukayo.site";
+const BASE_URL = process.env.NEXT_PUBLIC_SITE_URL || "https://wedabimepramukayo.site";
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   // Fetch all dynamic content in parallel

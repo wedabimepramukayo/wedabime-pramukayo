@@ -9,6 +9,28 @@ import CredentialsProvider from "next-auth/providers/credentials";
 import bcrypt from "bcryptjs";
 import { db } from "@/lib/db";
 
+// Validate AUTH_SECRET at module load time to prevent silent security issues
+const PLACEHOLDER_SECRETS = [
+  "your-secret-key-here-change-this",
+  "change-me",
+  "secret",
+  "",
+];
+
+if (!process.env.AUTH_SECRET || PLACEHOLDER_SECRETS.includes(process.env.AUTH_SECRET)) {
+  if (process.env.NODE_ENV === "production") {
+    throw new Error(
+      "AUTH_SECRET environment variable must be set to a secure random value in production. " +
+      "Generate one with: openssl rand -base64 32"
+    );
+  }
+  // In development, warn but don't crash
+  console.warn(
+    "⚠️ AUTH_SECRET is not set or uses a placeholder value. " +
+    "This is insecure for production. Set a strong random value."
+  );
+}
+
 export const authOptions: NextAuthOptions = {
   providers: [
     CredentialsProvider({

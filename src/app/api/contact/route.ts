@@ -59,8 +59,8 @@ export async function POST(req: NextRequest) {
 
     // TODO: Integrate with email service (Resend, SendGrid, Nodemailer, etc.)
     // await resend.emails.send({
-    //   from: 'website@wedabimepramukayo.site',
-    //   to: 'info@wedabimepramukayo.site',
+    //   from: process.env.CONTACT_FROM_EMAIL!,
+    //   to: process.env.CONTACT_TO_EMAIL!,
     //   subject: `[Contact Form] ${subject}`,
     //   html: `<p><strong>Name:</strong> ${name}</p><p><strong>Email:</strong> ${email}</p><p><strong>Phone:</strong> ${phone || 'N/A'}</p><p><strong>Message:</strong></p><p>${message}</p>`,
     // });

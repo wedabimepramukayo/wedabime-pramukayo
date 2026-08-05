@@ -48,7 +48,12 @@ interface PostResult {
 
 // ─── Helpers ──────────────────────────────────────────────────
 
-const SITE_URL = () => process.env.NEXT_PUBLIC_SITE_URL || "https://wedabimepramukayo.site";
+const SITE_URL = () => {
+  if (!process.env.NEXT_PUBLIC_SITE_URL) {
+    throw new Error("NEXT_PUBLIC_SITE_URL environment variable is required for social posting");
+  }
+  return process.env.NEXT_PUBLIC_SITE_URL;
+};
 
 /** Generate a short excerpt from HTML content */
 function extractExcerpt(content: string, maxLength = 200): string {
@@ -473,7 +478,7 @@ export async function postToReddit(
       headers: {
         "Content-Type": "application/x-www-form-urlencoded",
         Authorization: `Bearer ${account.accessToken}`,
-        "User-Agent": "WedabimePramukayoCMS/1.0",
+        "User-Agent": "CMS-SocialPoster/1.0",
       },
       body: new URLSearchParams({
         sr: subreddit,

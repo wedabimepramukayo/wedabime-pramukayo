@@ -306,7 +306,7 @@ export default function ManageAdminsPage() {
                   type="email"
                   value={addEmail}
                   onChange={(e) => setAddEmail(e.target.value)}
-                  placeholder="email@wedabimepramukayo.site"
+                  placeholder="user@example.com"
                   required
                   className="bg-brand-dark/50 border-brand-emerald/20 text-white"
                 />

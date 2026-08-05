@@ -147,7 +147,7 @@ export default async function ContactPage() {
               <div className="rounded-xl border border-brand-emerald/10 bg-brand-mint/20 h-48 flex items-center justify-center">
                 <div className="text-center">
                   <MapPin className="h-8 w-8 text-brand-emerald/40 mx-auto mb-2" />
-                  <p className="text-sm text-muted-foreground">Gampaha District, Sri Lanka</p>
+                  <p className="text-sm text-muted-foreground">Set address in Site Settings</p>
                   <p className="text-xs text-muted-foreground/60">Map integration available in production</p>
                 </div>
               </div>

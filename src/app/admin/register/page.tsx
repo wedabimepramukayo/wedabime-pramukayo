@@ -261,7 +261,7 @@ export default function AdminRegisterPage() {
                 <Input
                   id="email"
                   type="email"
-                  placeholder="you@wedabimepramukayo.site"
+                  placeholder="you@example.com"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   required

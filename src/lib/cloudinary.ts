@@ -9,7 +9,12 @@
 const CLOUD_NAME = () => process.env.CLOUDINARY_CLOUD_NAME!;
 const API_KEY = () => process.env.CLOUDINARY_API_KEY!;
 const API_SECRET = () => process.env.CLOUDINARY_API_SECRET!;
-const UPLOAD_FOLDER = () => process.env.CLOUDINARY_UPLOAD_FOLDER || "wedabime-pramukayo";
+const UPLOAD_FOLDER = () => {
+  if (!process.env.CLOUDINARY_UPLOAD_FOLDER) {
+    throw new Error("CLOUDINARY_UPLOAD_FOLDER environment variable is required");
+  }
+  return process.env.CLOUDINARY_UPLOAD_FOLDER;
+};
 
 export interface CloudinaryUploadResult {
   url: string;            // Full Cloudinary URL
