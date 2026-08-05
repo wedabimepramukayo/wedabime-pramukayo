@@ -21,6 +21,7 @@ import {
   Inbox,
   ImageIcon,
   Share2,
+  Layout,
 } from "lucide-react";
 import { useState } from "react";
 import { signOut } from "next-auth/react";
@@ -38,6 +39,12 @@ const menuItems = [
     href: "/admin/pages",
     icon: FileText,
     description: "Manage Content",
+  },
+  {
+    label: "Sections",
+    href: "/admin/sections",
+    icon: Layout,
+    description: "Page Section Editor",
   },
   {
     label: "Services",

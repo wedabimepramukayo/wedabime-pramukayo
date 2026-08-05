@@ -2,7 +2,7 @@
  * Prisma Database Client — Wedabime Pramukayo CMS
  *
  * Uses PrismaNeonHttp adapter for Cloudflare Workers compatibility.
- * - @prisma/client/edge: Edge runtime client (no binary query engine needed)
+ * - @prisma/client: Standard Prisma Client (works with adapter pattern)
  * - PrismaNeonHttp: HTTP adapter that sends queries via Neon fetch API
  * - Passes DATABASE_URL directly to adapter (not a neon() function)
  *
@@ -12,8 +12,8 @@
  * Lazy initialization via Proxy prevents DATABASE_URL errors during `next build`.
  */
 
-import { PrismaNeonHTTP } from '@prisma/adapter-neon'
-import { PrismaClient } from '@prisma/client/edge'
+import { PrismaNeonHttp } from '@prisma/adapter-neon'
+import { PrismaClient } from '@prisma/client'
 import { neon } from '@neondatabase/serverless'
 
 const globalForPrisma = globalThis as unknown as {
@@ -21,15 +21,12 @@ const globalForPrisma = globalThis as unknown as {
 }
 
 function createPrismaClient(): PrismaClient {
-  // PrismaNeonHTTP takes the connectionString directly
-  // It internally uses neon() HTTP driver to send queries over HTTPS
+  // PrismaNeonHttp takes the connection string directly
+  // It internally calls neon() to create the HTTP driver
   // No WebSocket or native binary engine needed
-  const adapter = new PrismaNeonHTTP(process.env.DATABASE_URL!, {
-    poolQueryViaFetch: true,
-  })
+  const adapter = new PrismaNeonHttp(process.env.DATABASE_URL!)
   return new PrismaClient({
     adapter,
-    log: process.env.NODE_ENV === 'development' ? ['query', 'error', 'warn'] : ['error'],
   })
 }
 

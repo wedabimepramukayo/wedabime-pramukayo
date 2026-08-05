@@ -1,6 +1,7 @@
 /**
  * Home Page — Wedabime Pramukayo
- * Dynamic homepage with hero, featured services, advantages, and CTA
+ * CMS-driven homepage with hero, featured services, advantages, and CTA
+ * All section content is fetched from ContentSection table
  */
 
 // Force dynamic rendering — page queries database at request time
@@ -11,23 +12,47 @@ import Image from "next/image";
 import Link from "next/link";
 import {
   ArrowRight,
-  Shield,
-  Droplets,
-  Flame,
-  Bug,
-  Wrench,
-  TreePine,
   Award,
   CheckCircle,
   Star,
 } from "lucide-react";
+import { getIcon } from "@/lib/icon-map";
 
 export const revalidate = 60; // Revalidate every 60 seconds
 
+interface SectionItem {
+  icon?: string;
+  title?: string;
+  desc?: string;
+  value?: string;
+  label?: string;
+  color?: string;
+  imageUrl?: string;
+}
+
+interface ContentSectionData {
+  id: string;
+  sectionKey: string;
+  type: string;
+  title: string | null;
+  subtitle: string | null;
+  content: string | null;
+  items: SectionItem[] | null;
+  imageUrl: string | null;
+  linkUrl: string | null;
+  linkText: string | null;
+  sortOrder: number;
+  isActive: boolean;
+  settings: Record<string, any> | null;
+}
+
 async function getHomeData() {
   try {
-    const [pages, featuredServices, categories, settings] = await Promise.all([
-      db.page.findUnique({ where: { slug: "home" } }),
+    const [sections, featuredServices, categories] = await Promise.all([
+      db.contentSection.findMany({
+        where: { pageSlug: "home", isActive: true },
+        orderBy: { sortOrder: "asc" },
+      }),
       db.product.findMany({
         where: { isPublished: true, isFeatured: true },
         orderBy: { sortOrder: "asc" },
@@ -39,31 +64,42 @@ async function getHomeData() {
         orderBy: { sortOrder: "asc" },
         include: { _count: { select: { products: true } } },
       }),
-      db.siteSetting.findMany({ where: { category: "general" } }),
     ]);
 
-    const settingsMap: Record<string, string> = {};
-    settings.forEach((s) => { settingsMap[s.key] = s.value; });
+    // Map sections by sectionKey for easy access
+    const sectionsMap: Record<string, ContentSectionData> = {};
+    sections.forEach((s) => {
+      sectionsMap[s.sectionKey] = {
+        ...s,
+        items: s.items as SectionItem[] | null,
+        settings: s.settings as Record<string, any> | null,
+      };
+    });
 
-    return { pages, featuredServices, categories, settingsMap };
+    return { sectionsMap, featuredServices, categories };
   } catch (error) {
     console.error("Homepage data fetch error:", error);
-    return { pages: null as any, featuredServices: [] as any[], categories: [] as any[], settingsMap: {} as Record<string, string> };
+    return {
+      sectionsMap: {} as Record<string, ContentSectionData>,
+      featuredServices: [] as any[],
+      categories: [] as any[],
+    };
   }
 }
 
-const advantages = [
-  { icon: Droplets, title: "100% Waterproof", desc: "No warping, no mold, no water damage — ever" },
-  { icon: Flame, title: "Fire-Retardant", desc: "Certified fire safety for your family and property" },
-  { icon: Bug, title: "100% Termite Proof", desc: "Complete protection against termites and moths" },
-  { icon: Wrench, title: "Click-it System", desc: "Fast, seamless installation with no extra trims" },
-  { icon: Shield, title: "15 Year Warranty", desc: "One of the longest warranties in the industry" },
-  { icon: TreePine, title: "Eco-Friendly", desc: "Saves 1,875+ trees every month" },
-];
-
 export default async function HomePage() {
-  const { pages, featuredServices, categories, settingsMap } = await getHomeData();
-  const homePage = pages;
+  const { sectionsMap, featuredServices, categories } = await getHomeData();
+
+  const hero = sectionsMap["hero"];
+  const categoriesSection = sectionsMap["categories"];
+  const featuredSection = sectionsMap["featured-services"];
+  const advantagesSection = sectionsMap["advantages"];
+  const ctaSection = sectionsMap["cta"];
+  const statsSection = sectionsMap["stats"];
+
+  const heroItems = (hero?.items || []) as SectionItem[];
+  const advantageItems = (advantagesSection?.items || []) as SectionItem[];
+  const statItems = (statsSection?.items || []) as SectionItem[];
 
   return (
     <div>
@@ -88,17 +124,17 @@ export default async function HomePage() {
                 Built for Generations
               </div>
               <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold text-white leading-tight">
-                {homePage?.heroTitle || "Premium i-Panel Solutions for Sri Lanka"}
+                {hero?.title || "Premium i-Panel Solutions for Sri Lanka"}
               </h1>
               <p className="text-lg text-brand-sage/80 max-w-xl leading-relaxed">
-                {homePage?.heroSubtitle || "Waterproof, fire-retardant, and 100% termite proof ceiling, wall cladding & roofing solutions with up to 15 years warranty."}
+                {hero?.subtitle || "Waterproof, fire-retardant, and 100% termite proof ceiling, wall cladding & roofing solutions with up to 15 years warranty."}
               </p>
               <div className="flex flex-wrap gap-4">
                 <Link
-                  href="/services"
+                  href={hero?.linkUrl || "/services"}
                   className="inline-flex items-center gap-2 px-6 py-3 bg-brand-spring text-brand-dark font-semibold rounded-lg hover:bg-brand-spring/90 transition-colors shadow-lg"
                 >
-                  Explore Services
+                  {hero?.linkText || "Explore Services"}
                   <ArrowRight className="h-4 w-4" />
                 </Link>
                 <Link
@@ -109,23 +145,20 @@ export default async function HomePage() {
                 </Link>
               </div>
 
-              {/* Quick Stats */}
-              <div className="flex items-center gap-6 pt-4">
-                <div className="text-center">
-                  <div className="text-2xl font-bold text-brand-spring">1,875+</div>
-                  <div className="text-[10px] text-brand-sage/60">Trees Saved/Mo</div>
+              {/* Quick Stats from hero items */}
+              {heroItems.length > 0 && (
+                <div className="flex items-center gap-6 pt-4">
+                  {heroItems.map((item, i) => (
+                    <div key={i} className="contents">
+                      {i > 0 && <div className="w-px h-10 bg-white/10" />}
+                      <div className="text-center">
+                        <div className={`text-2xl font-bold ${item.color || "text-brand-spring"}`}>{item.value}</div>
+                        <div className="text-[10px] text-brand-sage/60">{item.label}</div>
+                      </div>
+                    </div>
+                  ))}
                 </div>
-                <div className="w-px h-10 bg-white/10" />
-                <div className="text-center">
-                  <div className="text-2xl font-bold text-brand-gold">15 Yrs</div>
-                  <div className="text-[10px] text-brand-sage/60">Warranty</div>
-                </div>
-                <div className="w-px h-10 bg-white/10" />
-                <div className="text-center">
-                  <div className="text-2xl font-bold text-brand-teal">100%</div>
-                  <div className="text-[10px] text-brand-sage/60">Termite Proof</div>
-                </div>
-              </div>
+              )}
             </div>
 
             {/* Hero Visual */}
@@ -159,9 +192,11 @@ export default async function HomePage() {
       <section className="py-16 bg-brand-cream">
         <div className="max-w-7xl mx-auto px-4">
           <div className="text-center mb-10">
-            <h2 className="text-3xl font-bold text-brand-primary">Our Product Categories</h2>
+            <h2 className="text-3xl font-bold text-brand-primary">
+              {categoriesSection?.title || "Our Product Categories"}
+            </h2>
             <p className="text-muted-foreground mt-2 max-w-lg mx-auto">
-              Discover our comprehensive range of i-Panel solutions, organized by series to help you find the perfect product for your project.
+              {categoriesSection?.subtitle || "Discover our comprehensive range of i-Panel solutions, organized by series to help you find the perfect product for your project."}
             </p>
           </div>
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
@@ -192,13 +227,15 @@ export default async function HomePage() {
           <div className="max-w-7xl mx-auto px-4">
             <div className="flex items-center justify-between mb-10">
               <div>
-                <h2 className="text-3xl font-bold text-brand-primary">Featured Services</h2>
+                <h2 className="text-3xl font-bold text-brand-primary">
+                  {featuredSection?.title || "Featured Services"}
+                </h2>
                 <p className="text-muted-foreground mt-2">
-                  Our most popular i-Panel solutions trusted across Sri Lanka
+                  {featuredSection?.subtitle || "Our most popular i-Panel solutions trusted across Sri Lanka"}
                 </p>
               </div>
               <Link
-                href="/services"
+                href={featuredSection?.linkUrl || "/services"}
                 className="hidden md:inline-flex items-center gap-2 text-sm font-semibold text-brand-primary hover:text-brand-emerald transition-colors"
               >
                 View All Services
@@ -255,7 +292,7 @@ export default async function HomePage() {
 
             <div className="mt-8 text-center md:hidden">
               <Link
-                href="/services"
+                href={featuredSection?.linkUrl || "/services"}
                 className="inline-flex items-center gap-2 text-sm font-semibold text-brand-primary"
               >
                 View All Services <ArrowRight className="h-4 w-4" />
@@ -266,83 +303,109 @@ export default async function HomePage() {
       )}
 
       {/* ─── Advantages Section ────────────────────────── */}
-      <section className="py-16 bg-brand-cream">
-        <div className="max-w-7xl mx-auto px-4">
-          <div className="text-center mb-10">
-            <h2 className="text-3xl font-bold text-brand-primary">Why Choose i-Panel?</h2>
-            <p className="text-muted-foreground mt-2 max-w-lg mx-auto">
-              Engineered for Sri Lanka&apos;s tropical climate with advantages that make i-Panel the smartest choice for your home.
-            </p>
-          </div>
+      {advantagesSection && (
+        <section className="py-16 bg-brand-cream">
+          <div className="max-w-7xl mx-auto px-4">
+            <div className="text-center mb-10">
+              <h2 className="text-3xl font-bold text-brand-primary">
+                {advantagesSection.title || "Why Choose i-Panel?"}
+              </h2>
+              <p className="text-muted-foreground mt-2 max-w-lg mx-auto">
+                {advantagesSection.subtitle || ""}
+              </p>
+            </div>
 
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-6">
-            {advantages.map((adv) => {
-              const Icon = adv.icon;
-              return (
-                <div
-                  key={adv.title}
-                  className="p-6 rounded-xl border border-brand-emerald/10 bg-white hover:border-brand-emerald/30 hover:shadow-lg transition-all text-center"
-                >
-                  <div className="h-14 w-14 rounded-xl bg-brand-mint/30 flex items-center justify-center mx-auto mb-4">
-                    <Icon className="h-7 w-7 text-brand-primary" />
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-6">
+              {advantageItems.map((adv, i) => {
+                const Icon = getIcon(adv.icon);
+                return (
+                  <div
+                    key={i}
+                    className="p-6 rounded-xl border border-brand-emerald/10 bg-white hover:border-brand-emerald/30 hover:shadow-lg transition-all text-center"
+                  >
+                    <div className={`h-14 w-14 rounded-xl ${adv.color || "bg-brand-mint/30"} flex items-center justify-center mx-auto mb-4`}>
+                      <Icon className="h-7 w-7 text-brand-primary" />
+                    </div>
+                    <h3 className="font-bold text-foreground mb-2">{adv.title}</h3>
+                    <p className="text-sm text-muted-foreground">{adv.desc}</p>
                   </div>
-                  <h3 className="font-bold text-foreground mb-2">{adv.title}</h3>
-                  <p className="text-sm text-muted-foreground">{adv.desc}</p>
-                </div>
-              );
-            })}
-          </div>
+                );
+              })}
+            </div>
 
-          <div className="text-center mt-8">
-            <Link
-              href="/advantages"
-              className="inline-flex items-center gap-2 px-6 py-3 bg-brand-primary text-white font-semibold rounded-lg hover:bg-brand-primary/90 transition-colors"
-            >
-              See All Advantages
-              <ArrowRight className="h-4 w-4" />
-            </Link>
+            <div className="text-center mt-8">
+              <Link
+                href="/advantages"
+                className="inline-flex items-center gap-2 px-6 py-3 bg-brand-primary text-white font-semibold rounded-lg hover:bg-brand-primary/90 transition-colors"
+              >
+                See All Advantages
+                <ArrowRight className="h-4 w-4" />
+              </Link>
+            </div>
           </div>
-        </div>
-      </section>
+        </section>
+      )}
+
+      {/* ─── Stats Section ─────────────────────────────── */}
+      {statsSection && statItems.length > 0 && (
+        <section className="py-12 bg-white">
+          <div className="max-w-5xl mx-auto px-4">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-8">
+              {statItems.map((stat, i) => {
+                const Icon = getIcon(stat.icon);
+                return (
+                  <div key={i} className="text-center">
+                    <Icon className={`h-8 w-8 ${stat.color || "text-brand-primary"} mx-auto mb-3`} />
+                    <div className="text-3xl font-bold text-foreground">{stat.value}</div>
+                    <div className="text-sm text-muted-foreground mt-1">{stat.label}</div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </section>
+      )}
 
       {/* ─── CTA Section ───────────────────────────────── */}
-      <section className="py-16">
-        <div className="max-w-7xl mx-auto px-4">
-          <div
-            className="rounded-2xl p-10 md:p-14 text-center text-white relative overflow-hidden"
-            style={{
-              background: "linear-gradient(135deg, #1B4332 0%, #2D6A4F 50%, #40916C 100%)",
-            }}
-          >
-            <div className="absolute -top-20 -right-20 w-60 h-60 bg-brand-spring/10 rounded-full blur-3xl" />
-            <div className="absolute -bottom-20 -left-20 w-60 h-60 bg-brand-teal/10 rounded-full blur-3xl" />
+      {ctaSection && (
+        <section className="py-16">
+          <div className="max-w-7xl mx-auto px-4">
+            <div
+              className="rounded-2xl p-10 md:p-14 text-center text-white relative overflow-hidden"
+              style={{
+                background: "linear-gradient(135deg, #1B4332 0%, #2D6A4F 50%, #40916C 100%)",
+              }}
+            >
+              <div className="absolute -top-20 -right-20 w-60 h-60 bg-brand-spring/10 rounded-full blur-3xl" />
+              <div className="absolute -bottom-20 -left-20 w-60 h-60 bg-brand-teal/10 rounded-full blur-3xl" />
 
-            <div className="relative">
-              <h2 className="text-3xl md:text-4xl font-bold mb-4">
-                Ready to Transform Your Home?
-              </h2>
-              <p className="text-brand-sage/80 max-w-lg mx-auto mb-8">
-                Get in touch with our team for a free consultation and discover how i-Panel can elevate your living space with premium, maintenance-free solutions.
-              </p>
-              <div className="flex flex-wrap justify-center gap-4">
-                <Link
-                  href="/contact"
-                  className="inline-flex items-center gap-2 px-8 py-3.5 bg-brand-spring text-brand-dark font-bold rounded-lg hover:bg-brand-spring/90 transition-colors shadow-lg"
-                >
-                  Get Free Quote
-                  <ArrowRight className="h-4 w-4" />
-                </Link>
-                <Link
-                  href="/services"
-                  className="inline-flex items-center gap-2 px-8 py-3.5 border border-white/20 text-white font-bold rounded-lg hover:bg-white/10 transition-colors"
-                >
-                  Browse Services
-                </Link>
+              <div className="relative">
+                <h2 className="text-3xl md:text-4xl font-bold mb-4">
+                  {ctaSection.title || "Ready to Transform Your Home?"}
+                </h2>
+                <p className="text-brand-sage/80 max-w-lg mx-auto mb-8">
+                  {ctaSection.subtitle || "Get in touch with our team for a free consultation."}
+                </p>
+                <div className="flex flex-wrap justify-center gap-4">
+                  <Link
+                    href={ctaSection.linkUrl || "/contact"}
+                    className="inline-flex items-center gap-2 px-8 py-3.5 bg-brand-spring text-brand-dark font-bold rounded-lg hover:bg-brand-spring/90 transition-colors shadow-lg"
+                  >
+                    {ctaSection.linkText || "Get Free Quote"}
+                    <ArrowRight className="h-4 w-4" />
+                  </Link>
+                  <Link
+                    href={ctaSection.settings?.secondaryLinkUrl || "/services"}
+                    className="inline-flex items-center gap-2 px-8 py-3.5 border border-white/20 text-white font-bold rounded-lg hover:bg-white/10 transition-colors"
+                  >
+                    {ctaSection.settings?.secondaryLinkText || "Browse Services"}
+                  </Link>
+                </div>
               </div>
             </div>
           </div>
-        </div>
-      </section>
+        </section>
+      )}
     </div>
   );
 }

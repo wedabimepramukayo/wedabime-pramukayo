@@ -1,6 +1,6 @@
 /**
  * Blog Listing Page — Wedabime Pramukayo
- * Shows published blog posts with tags and excerpts
+ * CMS-driven hero section + DB-driven blog posts
  */
 
 // Force dynamic rendering — page queries database at request time
@@ -25,11 +25,21 @@ function parseTags(val: string | null): string[] {
 
 export default async function BlogPage() {
   let posts: any[] = [];
+  let heroSection: any = null;
+
   try {
-    posts = await db.blogPost.findMany({
-      where: { isPublished: true },
-      orderBy: { publishedAt: "desc" },
-    });
+    const [postsData, sections] = await Promise.all([
+      db.blogPost.findMany({
+        where: { isPublished: true },
+        orderBy: { publishedAt: "desc" },
+      }),
+      db.contentSection.findMany({
+        where: { pageSlug: "blog", isActive: true },
+        orderBy: { sortOrder: "asc" },
+      }),
+    ]);
+    posts = postsData;
+    heroSection = sections.find((s) => s.sectionKey === "hero");
   } catch (error) {
     console.error("Failed to fetch blog posts:", error);
     posts = [] as any;
@@ -41,9 +51,9 @@ export default async function BlogPage() {
       {/* Hero */}
       <section className="relative py-20 text-white" style={{ background: "linear-gradient(135deg, #1B4332 0%, #2D6A4F 60%, #40916C 100%)" }}>
         <div className="relative max-w-7xl mx-auto px-4 text-center">
-          <h1 className="text-4xl md:text-5xl font-bold">Blog</h1>
+          <h1 className="text-4xl md:text-5xl font-bold">{heroSection?.title || "Blog"}</h1>
           <p className="text-lg text-brand-sage/80 mt-4 max-w-2xl mx-auto">
-            Tips, guides, and insights about i-Panel solutions for Sri Lankan homes and businesses.
+            {heroSection?.subtitle || "Tips, guides, and insights about i-Panel solutions for Sri Lankan homes and businesses."}
           </p>
         </div>
       </section>

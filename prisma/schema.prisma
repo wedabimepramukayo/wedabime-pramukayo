@@ -168,6 +168,28 @@ model SocialAccount {
   posts         SocialPost[]
 }
 
+// ─── CONTENT SECTIONS (CMS-Driven Page Sections) ──────────────
+model ContentSection {
+  id          String    @id @default(cuid())
+  pageSlug    String    // "home", "about", "services", "advantages", "contact", "blog"
+  sectionKey  String    // "hero", "advantages", "stats", "cta", "values", "intro", "features", "gallery", etc.
+  type        String    // "hero", "cards", "stats", "text", "cta", "features", "gallery", "faq", "testimonials"
+  title       String?
+  subtitle    String?
+  content     String?   // HTML content for text blocks
+  items       Json?     // Array of items: [{title, desc, icon, imageUrl, value, ...}] for cards/stats/features
+  imageUrl    String?   // Background/image for the section
+  linkUrl     String?   // CTA link
+  linkText    String?   // CTA button text
+  sortOrder   Int       @default(0)
+  isActive    Boolean   @default(true)
+  settings    Json?     // Section-specific settings {layout, columns, bgColor, accentColor, ...}
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@unique([pageSlug, sectionKey])
+}
+
 // ─── SOCIAL MEDIA POSTS ───────────────────────────────────────
 model SocialPost {
   id              String    @id @default(cuid())

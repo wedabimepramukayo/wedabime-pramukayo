@@ -1,58 +1,69 @@
 /**
  * Contact Page — Wedabime Pramukayo
- * Contact form with real API submission, business information, and map placeholder
+ * CMS-driven contact page with form, business information from ContentSection
  */
 
-"use client";
-
-import { useState } from "react";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
-import { Label } from "@/components/ui/label";
-import { MapPin, Clock, Phone, Mail, Send, CheckCircle, Loader2, TreePine, Shield, AlertCircle } from "lucide-react";
+import { db } from "@/lib/db";
 import { Breadcrumbs } from "@/components/public/breadcrumbs";
+import { getIcon } from "@/lib/icon-map";
+import ContactClient from "./contact-client";
+import { MapPin, Shield, TreePine } from "lucide-react";
 
-export default function ContactPage() {
-  const [sending, setSending] = useState(false);
-  const [sent, setSent] = useState(false);
-  const [error, setError] = useState("");
+export const dynamic = 'force-dynamic';
+export const revalidate = 60;
 
-  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    setError("");
-    setSending(true);
+interface SectionItem {
+  icon?: string;
+  title?: string;
+  desc?: string;
+  value?: string;
+  label?: string;
+  color?: string;
+}
 
-    const form = e.currentTarget;
-    const data = {
-      name: (form.elements.namedItem("name") as HTMLInputElement).value,
-      email: (form.elements.namedItem("email") as HTMLInputElement).value,
-      phone: (form.elements.namedItem("phone") as HTMLInputElement).value,
-      subject: (form.elements.namedItem("subject") as HTMLInputElement).value,
-      message: (form.elements.namedItem("message") as HTMLTextAreaElement).value,
-    };
+interface ContentSectionData {
+  id: string;
+  sectionKey: string;
+  type: string;
+  title: string | null;
+  subtitle: string | null;
+  content: string | null;
+  items: SectionItem[] | null;
+  imageUrl: string | null;
+  linkUrl: string | null;
+  linkText: string | null;
+  sortOrder: number;
+  isActive: boolean;
+  settings: Record<string, any> | null;
+}
 
-    try {
-      const res = await fetch("/api/contact", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(data),
-      });
+export default async function ContactPage() {
+  let sectionsMap: Record<string, ContentSectionData> = {};
 
-      const result = await res.json();
+  try {
+    const sections = await db.contentSection.findMany({
+      where: { pageSlug: "contact", isActive: true },
+      orderBy: { sortOrder: "asc" },
+    });
 
-      if (!res.ok) {
-        setError(result.error || "Something went wrong. Please try again.");
-        return;
-      }
+    sections.forEach((s) => {
+      sectionsMap[s.sectionKey] = {
+        ...s,
+        items: s.items as SectionItem[] | null,
+        settings: s.settings as Record<string, any> | null,
+      };
+    });
+  } catch (error) {
+    console.error("Failed to fetch contact page sections:", error);
+  }
 
-      setSent(true);
-    } catch {
-      setError("Network error. Please check your connection and try again.");
-    } finally {
-      setSending(false);
-    }
-  };
+  const hero = sectionsMap["hero"];
+  const infoSection = sectionsMap["info"];
+  const ecoBadge = sectionsMap["eco-badge"];
+  const warrantyBadge = sectionsMap["warranty-badge"];
+
+  const infoItems = (infoSection?.items || []) as SectionItem[];
+  const ecoItems = (ecoBadge?.items || []) as SectionItem[];
 
   return (
     <div>
@@ -60,9 +71,9 @@ export default function ContactPage() {
       {/* Hero */}
       <section className="relative py-20 text-white" style={{ background: "linear-gradient(135deg, #1B4332 0%, #2D6A4F 60%, #40916C 100%)" }}>
         <div className="relative max-w-7xl mx-auto px-4 text-center">
-          <h1 className="text-4xl md:text-5xl font-bold">Contact Us</h1>
+          <h1 className="text-4xl md:text-5xl font-bold">{hero?.title || "Contact Us"}</h1>
           <p className="text-lg text-brand-sage/80 mt-4 max-w-2xl mx-auto">
-            Get in touch for a free consultation, quote, or any questions about our i-Panel solutions.
+            {hero?.subtitle || "Get in touch for a free consultation, quote, or any questions about our i-Panel solutions."}
           </p>
         </div>
       </section>
@@ -71,134 +82,66 @@ export default function ContactPage() {
       <section className="py-16 bg-brand-cream">
         <div className="max-w-7xl mx-auto px-4">
           <div className="grid lg:grid-cols-2 gap-10">
-            {/* Contact Form */}
-            <div className="p-8 rounded-xl border border-brand-emerald/10 bg-white">
-              <h2 className="text-2xl font-bold text-brand-primary mb-6">Send Us a Message</h2>
+            {/* Contact Form (Client Component) */}
+            <ContactClient />
 
-              {sent ? (
-                <div className="text-center py-12">
-                  <CheckCircle className="h-16 w-16 text-brand-spring mx-auto mb-4" />
-                  <h3 className="text-xl font-bold text-foreground mb-2">Message Sent!</h3>
-                  <p className="text-muted-foreground mb-6">
-                    Thank you for reaching out. We&apos;ll get back to you within 24 hours.
-                  </p>
-                  <Button onClick={() => setSent(false)} variant="outline" className="mt-4">
-                    Send Another Message
-                  </Button>
-                </div>
-              ) : (
-                <form onSubmit={handleSubmit} className="space-y-5">
-                  {error && (
-                    <div className="flex items-center gap-2 p-3 rounded-lg bg-red-50 border border-red-200 text-red-700 text-sm">
-                      <AlertCircle className="h-4 w-4 flex-shrink-0" />
-                      {error}
-                    </div>
-                  )}
-                  <div className="grid sm:grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="name">Full Name *</Label>
-                      <Input id="name" name="name" placeholder="Your name" required disabled={sending} />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="phone">Phone Number</Label>
-                      <Input id="phone" name="phone" type="tel" placeholder="+94 XX XXX XXXX" disabled={sending} />
-                    </div>
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="email">Email Address *</Label>
-                    <Input id="email" name="email" type="email" placeholder="your@email.com" required disabled={sending} />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="subject">Subject *</Label>
-                    <Input id="subject" name="subject" placeholder="e.g. Quote for ceiling installation" required disabled={sending} />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="message">Message *</Label>
-                    <Textarea id="message" name="message" rows={5} placeholder="Tell us about your project..." required disabled={sending} />
-                  </div>
-                  <Button
-                    type="submit"
-                    disabled={sending}
-                    className="w-full bg-brand-primary hover:bg-brand-primary/90 py-3"
-                  >
-                    {sending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Send className="h-4 w-4 mr-2" />}
-                    {sending ? "Sending..." : "Send Message"}
-                  </Button>
-                </form>
-              )}
-            </div>
-
-            {/* Contact Info */}
+            {/* Contact Info (Server-Rendered from CMS) */}
             <div className="space-y-6">
               {/* Business Info Cards */}
               <div className="p-6 rounded-xl border border-brand-emerald/10 bg-white space-y-5">
-                <h2 className="text-xl font-bold text-brand-primary">Business Information</h2>
+                <h2 className="text-xl font-bold text-brand-primary">
+                  {infoSection?.title || "Business Information"}
+                </h2>
                 <div className="space-y-4">
-                  <div className="flex items-start gap-3">
-                    <div className="h-10 w-10 rounded-lg bg-brand-primary/10 flex items-center justify-center flex-shrink-0">
-                      <MapPin className="h-5 w-5 text-brand-primary" />
-                    </div>
-                    <div>
-                      <div className="font-semibold text-foreground">Address</div>
-                      <div className="text-sm text-muted-foreground">Gampaha District, Sri Lanka</div>
-                    </div>
-                  </div>
-                  <div className="flex items-start gap-3">
-                    <div className="h-10 w-10 rounded-lg bg-brand-emerald/10 flex items-center justify-center flex-shrink-0">
-                      <Clock className="h-5 w-5 text-brand-emerald" />
-                    </div>
-                    <div>
-                      <div className="font-semibold text-foreground">Business Hours</div>
-                      <div className="text-sm text-muted-foreground">Monday - Saturday: 8:00 AM - 6:00 PM</div>
-                      <div className="text-sm text-muted-foreground">Sunday: Closed</div>
-                    </div>
-                  </div>
-                  <div className="flex items-start gap-3">
-                    <div className="h-10 w-10 rounded-lg bg-brand-teal/10 flex items-center justify-center flex-shrink-0">
-                      <Phone className="h-5 w-5 text-brand-teal" />
-                    </div>
-                    <div>
-                      <div className="font-semibold text-foreground">Phone</div>
-                      <div className="text-sm text-muted-foreground">Call us for immediate assistance</div>
-                    </div>
-                  </div>
-                  <div className="flex items-start gap-3">
-                    <div className="h-10 w-10 rounded-lg bg-brand-gold/10 flex items-center justify-center flex-shrink-0">
-                      <Mail className="h-5 w-5 text-brand-gold" />
-                    </div>
-                    <div>
-                      <div className="font-semibold text-foreground">Email</div>
-                      <div className="text-sm text-muted-foreground">We respond within 24 hours</div>
-                    </div>
-                  </div>
+                  {infoItems.map((item, i) => {
+                    const Icon = getIcon(item.icon);
+                    const descLines = (item.desc || "").split("\n");
+                    return (
+                      <div key={i} className="flex items-start gap-3">
+                        <div className={`h-10 w-10 rounded-lg ${item.color || "bg-brand-primary/10 text-brand-primary"} flex items-center justify-center flex-shrink-0`}>
+                          <Icon className="h-5 w-5" />
+                        </div>
+                        <div>
+                          <div className="font-semibold text-foreground">{item.title}</div>
+                          {descLines.map((line, li) => (
+                            <div key={li} className="text-sm text-muted-foreground">{line}</div>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
 
               {/* Eco Badge */}
-              <div className="p-6 rounded-xl border border-brand-emerald/10 bg-white">
-                <div className="flex items-center gap-3 mb-3">
-                  <div className="h-10 w-10 rounded-lg bg-brand-spring/10 flex items-center justify-center">
-                    <TreePine className="h-5 w-5 text-brand-spring" />
+              {ecoBadge && ecoItems.length > 0 && (
+                <div className="p-6 rounded-xl border border-brand-emerald/10 bg-white">
+                  <div className="flex items-center gap-3 mb-3">
+                    <div className="h-10 w-10 rounded-lg bg-brand-spring/10 flex items-center justify-center">
+                      <TreePine className="h-5 w-5 text-brand-spring" />
+                    </div>
+                    <div>
+                      <div className="font-bold text-foreground">{ecoBadge.title || "Eco Impact"}</div>
+                      <div className="text-sm text-muted-foreground">{ecoBadge.subtitle || "Choosing i-Panel saves trees"}</div>
+                    </div>
                   </div>
-                  <div>
-                    <div className="font-bold text-foreground">Eco Impact</div>
-                    <div className="text-sm text-muted-foreground">Choosing i-Panel saves trees</div>
-                  </div>
+                  <div className="text-3xl font-bold text-brand-spring">{ecoItems[0]?.value || "1,875+"}</div>
+                  <div className="text-sm text-muted-foreground">{ecoItems[0]?.label || "Trees saved every month"}</div>
                 </div>
-                <div className="text-3xl font-bold text-brand-spring">1,875+</div>
-                <div className="text-sm text-muted-foreground">Trees saved every month</div>
-              </div>
+              )}
 
               {/* Warranty Badge */}
-              <div className="p-6 rounded-xl border border-brand-gold/10 bg-brand-gold/5">
-                <div className="flex items-center gap-3">
-                  <Shield className="h-8 w-8 text-brand-gold" />
-                  <div>
-                    <div className="font-bold text-foreground">Up to 15 Years Warranty</div>
-                    <div className="text-sm text-muted-foreground">Quality you can trust, backed by our comprehensive warranty.</div>
+              {warrantyBadge && (
+                <div className="p-6 rounded-xl border border-brand-gold/10 bg-brand-gold/5">
+                  <div className="flex items-center gap-3">
+                    <Shield className="h-8 w-8 text-brand-gold" />
+                    <div>
+                      <div className="font-bold text-foreground">{warrantyBadge.title || "Up to 15 Years Warranty"}</div>
+                      <div className="text-sm text-muted-foreground">{warrantyBadge.subtitle || "Quality you can trust, backed by our comprehensive warranty."}</div>
+                    </div>
                   </div>
                 </div>
-              </div>
+              )}
 
               {/* Map Placeholder */}
               <div className="rounded-xl border border-brand-emerald/10 bg-brand-mint/20 h-48 flex items-center justify-center">

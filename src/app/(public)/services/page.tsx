@@ -1,6 +1,6 @@
 /**
  * Services Listing Page — Wedabime Pramukayo
- * Shows all services with category filtering
+ * CMS-driven hero section + DB-driven services list
  */
 
 // Force dynamic rendering — page queries database at request time
@@ -15,7 +15,7 @@ export const revalidate = 60;
 
 async function getServicesData(categorySlug?: string) {
   try {
-    const [categories, services] = await Promise.all([
+    const [categories, services, sections] = await Promise.all([
       db.productCategory.findMany({
         where: { isActive: true },
         orderBy: { sortOrder: "asc" },
@@ -29,11 +29,17 @@ async function getServicesData(categorySlug?: string) {
         orderBy: { sortOrder: "asc" },
         include: { category: { select: { name: true, slug: true } } },
       }),
+      db.contentSection.findMany({
+        where: { pageSlug: "services", isActive: true },
+        orderBy: { sortOrder: "asc" },
+      }),
     ]);
-    return { categories, services };
+
+    const heroSection = sections.find((s) => s.sectionKey === "hero");
+    return { categories, services, heroSection };
   } catch (error) {
     console.error("Failed to fetch services data:", error);
-    return { categories: [], services: [] } as any;
+    return { categories: [] as any[], services: [] as any[], heroSection: null as any };
   }
 }
 
@@ -60,7 +66,7 @@ export default async function ServicesPage({
 }) {
   const params = await searchParams;
   const categorySlug = params.category;
-  const { categories, services } = await getServicesData(categorySlug);
+  const { categories, services, heroSection } = await getServicesData(categorySlug);
   const activeCategory = categories.find((c) => c.slug === categorySlug);
 
   return (
@@ -73,10 +79,10 @@ export default async function ServicesPage({
       >
         <div className="relative max-w-7xl mx-auto px-4 text-center">
           <h1 className="text-4xl md:text-5xl font-bold">
-            {activeCategory ? activeCategory.name : "Our Services"}
+            {activeCategory ? activeCategory.name : (heroSection?.title || "Our Services")}
           </h1>
           <p className="text-lg text-brand-sage/80 mt-4 max-w-2xl mx-auto">
-            {activeCategory?.description || "Explore our comprehensive range of i-Panel solutions designed for Sri Lanka."}
+            {activeCategory?.description || (heroSection?.subtitle || "Explore our comprehensive range of i-Panel solutions designed for Sri Lanka.")}
           </p>
         </div>
       </section>
