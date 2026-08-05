@@ -105,6 +105,8 @@ model BlogPost {
   publishedAt  DateTime?
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
+
+  socialPosts  SocialPost[]
 }
 
 // ─── SITE SETTINGS (Global Config) ─────────────────────────────
@@ -148,4 +150,37 @@ model ContactSubmission {
   repliedAt   DateTime?
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
+}
+
+// ─── SOCIAL MEDIA ACCOUNTS ────────────────────────────────────
+model SocialAccount {
+  id            String    @id @default(cuid())
+  platform      String    // "facebook", "threads", "instagram", "blogger", "medium", "reddit"
+  accessToken   String?   // OAuth access token (encrypted at rest)
+  refreshToken  String?   // OAuth refresh token
+  accountId     String?   // Platform-specific account/page ID
+  accountName   String?   // Display name
+  isActive      Boolean   @default(true)
+  lastUsedAt    DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  posts         SocialPost[]
+}
+
+// ─── SOCIAL MEDIA POSTS ───────────────────────────────────────
+model SocialPost {
+  id              String    @id @default(cuid())
+  blogPostId      String?
+  platform        String    // "facebook", "threads", "instagram", "blogger", "medium", "reddit"
+  platformPostId  String?   // ID returned by the platform
+  status          String    @default("pending") // pending, published, failed
+  content         String?   // The post content sent
+  error           String?   // Error message if failed
+  publishedAt     DateTime?
+  createdAt       DateTime  @default(now())
+
+  blogPost        BlogPost?      @relation(fields: [blogPostId], references: [id])
+  socialAccount   SocialAccount  @relation(fields: [socialAccountId], references: [id])
+  socialAccountId String
 }

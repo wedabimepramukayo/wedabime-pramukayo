@@ -20,6 +20,7 @@ import {
   TreePine,
   Inbox,
   ImageIcon,
+  Share2,
 } from "lucide-react";
 import { useState } from "react";
 import { signOut } from "next-auth/react";
@@ -55,6 +56,12 @@ const menuItems = [
     href: "/admin/blog",
     icon: NotebookPen,
     description: "Blog Posts",
+  },
+  {
+    label: "Social Media",
+    href: "/admin/social",
+    icon: Share2,
+    description: "Auto-Post & Sharing",
   },
   {
     label: "Media",

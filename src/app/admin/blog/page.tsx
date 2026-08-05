@@ -46,6 +46,7 @@ import {
   User,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { RichTextEditor } from "@/components/admin/rich-text-editor";
 
 interface BlogPost {
   id: string;
@@ -426,15 +427,13 @@ export default function AdminBlogClient() {
                 />
               </div>
 
-              {/* Content */}
+              {/* Content — Rich Text Editor */}
               <div className="space-y-2">
-                <Label>Content * (HTML)</Label>
-                <Textarea
+                <Label>Content *</Label>
+                <RichTextEditor
                   value={editingPost.content || ""}
-                  onChange={(e) => setEditingPost((prev) => ({ ...prev, content: e.target.value }))}
-                  rows={16}
-                  className="font-mono text-sm"
-                  placeholder="<h2>Section Title</h2>\n<p>Blog content...</p>"
+                  onChange={(html) => setEditingPost((prev) => ({ ...prev, content: html }))}
+                  placeholder="Start writing your blog post..."
                 />
               </div>
 
