@@ -5,7 +5,7 @@
  * Elegant green-themed login with brand identity
  */
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { signIn } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
@@ -14,7 +14,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardDescription } from "@/components/ui/card";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { TreePine, Shield, Eye, EyeOff, Loader2, Leaf } from "lucide-react";
+import { TreePine, Shield, Eye, EyeOff, Loader2, Leaf, CheckCircle2 } from "lucide-react";
 
 export default function AdminLoginPage() {
   const [email, setEmail] = useState("");
@@ -22,7 +22,16 @@ export default function AdminLoginPage() {
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [justRegistered, setJustRegistered] = useState(false);
   const router = useRouter();
+
+  // Check if just registered
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("registered") === "true") {
+      setJustRegistered(true);
+    }
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -106,6 +115,16 @@ export default function AdminLoginPage() {
 
           <CardContent>
             <form onSubmit={handleSubmit} className="space-y-5">
+              {/* Registration Success */}
+              {justRegistered && (
+                <Alert className="bg-green-500/10 border-green-500/20 text-green-300">
+                  <CheckCircle2 className="h-4 w-4" />
+                  <AlertDescription>
+                    Admin account created! You can now log in with your credentials.
+                  </AlertDescription>
+                </Alert>
+              )}
+
               {/* Error Alert */}
               {error && (
                 <Alert variant="destructive" className="bg-red-500/10 border-red-500/20 text-red-300">
@@ -124,7 +143,7 @@ export default function AdminLoginPage() {
                 <Input
                   id="email"
                   type="email"
-                  placeholder="admin@wedabimepramukayo.site"
+                  placeholder="your@email.com"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   required
@@ -198,6 +217,15 @@ export default function AdminLoginPage() {
                   <Leaf className="h-3.5 w-3.5 text-brand-spring/60" />
                   <span className="text-[10px]">Eco-friendly solutions</span>
                 </div>
+              </div>
+              {/* Register link — for first-time setup */}
+              <div className="mt-3 text-center">
+                <a
+                  href="/admin/register"
+                  className="text-brand-sage/40 hover:text-brand-spring/60 text-[10px] transition-colors"
+                >
+                  First time? Set up admin account →
+                </a>
               </div>
             </div>
           </CardContent>

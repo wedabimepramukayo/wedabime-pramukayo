@@ -14,23 +14,28 @@ const prisma = new PrismaClient();
 async function main() {
   console.log("🌱 Seeding Wedabime Pramukayo CMS database...\n");
 
-  // ─── 1. Create Admin User ──────────────────────────────────
-  const adminEmail = process.env.ADMIN_EMAIL || "admin@wedabimepramukayo.site";
-  const adminPassword = process.env.ADMIN_PASSWORD || "Admin@2025Secure!";
-  const passwordHash = await bcrypt.hash(adminPassword, 12);
+  // ─── 1. Create Admin User (only if env vars provided) ────────
+  const adminEmail = process.env.ADMIN_EMAIL;
+  const adminPassword = process.env.ADMIN_PASSWORD;
 
-  const admin = await prisma.user.upsert({
-    where: { email: adminEmail },
-    update: { passwordHash, name: "Administrator" },
-    create: {
-      email: adminEmail,
-      name: "Administrator",
-      passwordHash,
-      role: "admin",
-      isActive: true,
-    },
-  });
-  console.log(`✅ Admin user created: ${admin.email}`);
+  if (adminEmail && adminPassword) {
+    const passwordHash = await bcrypt.hash(adminPassword, 12);
+    const admin = await prisma.user.upsert({
+      where: { email: adminEmail },
+      update: { passwordHash, name: "Administrator" },
+      create: {
+        email: adminEmail,
+        name: "Administrator",
+        passwordHash,
+        role: "admin",
+        isActive: true,
+      },
+    });
+    console.log(`✅ Admin user created: ${admin.email}`);
+  } else {
+    console.log("⏭️  Skipping admin user creation (set ADMIN_EMAIL & ADMIN_PASSWORD env vars to create one)");
+    console.log("   You can also create an admin account via /admin/register page");
+  }
 
   // ─── 2. Create Default Pages ──────────────────────────────
   const pages = [
