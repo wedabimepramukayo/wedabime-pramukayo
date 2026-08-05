@@ -36,6 +36,20 @@ jobs:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           NEXT_PUBLIC_SITE_URL: ${{ secrets.NEXT_PUBLIC_SITE_URL }}
 
+      - name: Strip Prisma engine/WASM files (not needed with adapter)
+        run: |
+          # PrismaNeonHTTP adapter sends queries via Neon HTTP API
+          # Native engine + WASM files are NOT needed at runtime
+          # Removing them reduces bundle from ~107MB to ~37MB
+          find .open-next/ \( \
+            -name "libquery_engine-*.so.node" -o \
+            -name "query_compiler_fast_bg.wasm*" -o \
+            -name "query_compiler_bg.*.wasm*" -o \
+            -name "query_engine_bg.*.wasm*" \
+          \) -type f -delete
+          echo "Stripped Prisma engine files. Bundle size:"
+          du -sh .open-next/server-functions/default/
+
       - name: Deploy to Cloudflare Workers
         run: npx wrangler deploy
         env:

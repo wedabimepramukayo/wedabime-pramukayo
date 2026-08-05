@@ -2,17 +2,20 @@
  * Prisma Database Client — Wedabime Pramukayo CMS
  *
  * Uses PrismaNeonHTTP adapter for Cloudflare Workers compatibility.
- * - @prisma/client v6/edge + @prisma/adapter-neon v6 (versions MUST match)
+ * - @prisma/client v6 + @prisma/adapter-neon v6 (versions MUST match)
  * - PrismaNeonHTTP: HTTP adapter that sends queries via Neon fetch API
  * - Passes DATABASE_URL directly to adapter (not a neon() function)
- * - No native query engine needed — adapter replaces it entirely
- * - Import from @prisma/client/edge to exclude 17MB native engine + 5MB WASM
+ * - Adapter replaces the native query engine — no binary engine needed
+ *
+ * IMPORTANT: Import from @prisma/client (NOT /edge) when using adapter.
+ * The /edge endpoint is for the built-in WASM engine, not for adapters.
+ * Adapter + /edge are mutually exclusive in Prisma v6.
  *
  * Lazy initialization via Proxy prevents DATABASE_URL errors during `next build`.
  */
 
 import { PrismaNeonHTTP } from '@prisma/adapter-neon'
-import { PrismaClient } from '@prisma/client/edge'
+import { PrismaClient } from '@prisma/client'
 
 const globalForPrisma = globalThis as unknown as {
   prisma: PrismaClient | undefined
