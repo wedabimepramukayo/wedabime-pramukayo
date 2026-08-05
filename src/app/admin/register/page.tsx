@@ -46,12 +46,25 @@ export default function AdminRegisterPage() {
   const [checkingAccess, setCheckingAccess] = useState(true);
   const router = useRouter();
 
+  const [dbError, setDbError] = useState<string>("");
+
   // Check if registration is allowed (no users exist)
   useEffect(() => {
     async function checkRegistration() {
       try {
         const res = await fetch("/api/admin/users/count");
         if (!res.ok) {
+          const data = await res.json().catch(() => ({}));
+          // If DATABASE_URL is not configured, show specific error
+          if (data.error === "DATABASE_URL is not configured") {
+            setDbError(
+              "Database is not configured. Please set DATABASE_URL as a Cloudflare Worker secret."
+            );
+          } else if (res.status === 500) {
+            setDbError(
+              "Database connection failed. Please check your database configuration."
+            );
+          }
           setCanRegister(false);
           return;
         }
@@ -63,6 +76,7 @@ export default function AdminRegisterPage() {
           router.push("/admin/login");
         }
       } catch {
+        setDbError("Unable to connect to the server. Please try again later.");
         setCanRegister(false);
       } finally {
         setCheckingAccess(false);
@@ -152,11 +166,11 @@ export default function AdminRegisterPage() {
           <CardContent className="pt-6 text-center space-y-4">
             <AlertTriangle className="h-12 w-12 mx-auto text-yellow-400" />
             <h2 className="text-xl font-semibold text-white">
-              Registration Not Available
+              {dbError ? "Database Error" : "Registration Not Available"}
             </h2>
             <p className="text-brand-sage/70">
-              Admin accounts already exist. Please contact an existing
-              administrator to create a new account.
+              {dbError ||
+                "Admin accounts already exist. Please contact an existing administrator to create a new account."}
             </p>
             <Button
               onClick={() => router.push("/admin/login")}
