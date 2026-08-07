@@ -23,6 +23,15 @@ function getSql() {
   return neon(process.env.DATABASE_URL);
 }
 
+// Helper: generate CUID-like ID (compatible with Prisma's @default(cuid()))
+// Format: c + timestamp(base36) + random chars — same length as Prisma CUIDs
+function generateId(): string {
+  const timestamp = Date.now().toString(36);
+  const random = crypto.getRandomValues(new Uint8Array(24));
+  const randomStr = Array.from(random, b => b.toString(36).padStart(2, '0')).join('');
+  return `c${timestamp}${randomStr}`.slice(0, 25); // Prisma CUIDs are ~25 chars
+}
+
 export async function GET() {
   try {
     // Use Neon directly for listing users too
@@ -100,10 +109,13 @@ export async function POST(request: NextRequest) {
     // Hash password
     const passwordHash = await bcrypt.hash(password, 12);
 
+    // Generate ID (Prisma uses @default(cuid()), we generate manually for raw SQL)
+    const id = generateId();
+
     // Create user using Neon SQL
     const insertResult = await sql`
-      INSERT INTO "User" (email, "passwordHash", name, role, "isActive")
-      VALUES (${email}, ${passwordHash}, ${name || null}, ${role || "admin"}, true)
+      INSERT INTO "User" (id, email, "passwordHash", name, role, "isActive")
+      VALUES (${id}, ${email}, ${passwordHash}, ${name || null}, ${role || "admin"}, true)
       RETURNING id, email, name, role, "isActive", "createdAt"
     `;
     const user = insertResult[0];
