@@ -112,10 +112,11 @@ export async function POST(request: NextRequest) {
     // Generate ID (Prisma uses @default(cuid()), we generate manually for raw SQL)
     const id = generateId();
 
-    // Create user using Neon SQL
+    // Create user using Neon SQL (include all fields Prisma auto-manages)
+    const now = new Date().toISOString();
     const insertResult = await sql`
-      INSERT INTO "User" (id, email, "passwordHash", name, role, "isActive")
-      VALUES (${id}, ${email}, ${passwordHash}, ${name || null}, ${role || "admin"}, true)
+      INSERT INTO "User" (id, email, "passwordHash", name, role, "isActive", "createdAt", "updatedAt")
+      VALUES (${id}, ${email}, ${passwordHash}, ${name || null}, ${role || "admin"}, true, ${now}, ${now})
       RETURNING id, email, name, role, "isActive", "createdAt"
     `;
     const user = insertResult[0];
