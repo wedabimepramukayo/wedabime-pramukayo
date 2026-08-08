@@ -54,8 +54,9 @@ export default function AdminLoginPage() {
           setError("Invalid email or password. Please try again.");
         }
       } else if (result?.ok) {
-        router.push("/admin/dashboard");
-        router.refresh();
+        // Use full page navigation to ensure session cookie is properly synced
+        // Client-side router.push can have race conditions with cookie propagation
+        window.location.href = "/admin/dashboard";
       }
     } catch {
       setError("An unexpected error occurred. Please try again.");
