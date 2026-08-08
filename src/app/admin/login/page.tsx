@@ -3,11 +3,15 @@
 /**
  * Admin Login Page — Wedabime Pramukayo CMS
  * Elegant green-themed login with brand identity
+ *
+ * Uses a custom login API endpoint instead of NextAuth's signIn()
+ * to bypass the Cloudflare Workers redirect issue where NextAuth
+ * generates callback URLs with the workers.dev internal domain.
+ *
+ * Flow: POST /api/admin/login → sets session cookie → navigate to dashboard
  */
 
 import { useState, useEffect } from "react";
-import { signIn } from "next-auth/react";
-import { useRouter } from "next/navigation";
 import Image from "next/image";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -23,7 +27,6 @@ export default function AdminLoginPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [justRegistered, setJustRegistered] = useState(false);
-  const router = useRouter();
 
   // Check if just registered
   useEffect(() => {
@@ -39,23 +42,23 @@ export default function AdminLoginPage() {
     setIsLoading(true);
 
     try {
-      const result = await signIn("credentials", {
-        email,
-        password,
-        redirect: false,
+      // Use custom login endpoint that bypasses NextAuth's redirect mechanism
+      const response = await fetch("/api/admin/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password }),
       });
 
-      if (result?.error) {
-        // Parse the error message
-        try {
-          const errorObj = JSON.parse(result.error);
-          setError(errorObj.message || "Invalid credentials");
-        } catch {
-          setError("Invalid email or password. Please try again.");
-        }
-      } else if (result?.ok) {
-        // Use full page navigation to ensure session cookie is properly synced
-        // Client-side router.push can have race conditions with cookie propagation
+      const data = await response.json();
+
+      if (!response.ok) {
+        setError(data.error || "Invalid email or password. Please try again.");
+        return;
+      }
+
+      if (data.success) {
+        // Session cookie is set by the server - navigate to dashboard
+        // Use full page navigation to ensure cookie is available
         window.location.href = "/admin/dashboard";
       }
     } catch {
