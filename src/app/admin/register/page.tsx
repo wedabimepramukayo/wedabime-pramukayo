@@ -124,7 +124,10 @@ export default function AdminRegisterPage() {
       const data = await res.json();
 
       if (!res.ok) {
-        setError(data.error || "Registration failed. Please try again.");
+        // Show the server error, and include detail for debugging
+        const serverError = data.error || "Registration failed. Please try again.";
+        const detail = data.detail ? ` (${data.detail})` : "";
+        setError(serverError + detail);
         return;
       }
 

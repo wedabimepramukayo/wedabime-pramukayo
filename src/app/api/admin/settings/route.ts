@@ -1,24 +1,32 @@
 /**
  * API: Site Settings — GET all settings grouped by category, PATCH bulk update
  * Wedabime Pramukayo CMS
+ * Uses @neondatabase/serverless directly (Cloudflare Workers compatible)
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { db } from "@/lib/db";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
+import {
+  getSql,
+  requireAuth,
+  unauthorized,
+  badRequest,
+  serverError,
+} from "@/lib/neon-sql";
 
 // GET /api/admin/settings — Fetch all settings grouped by category
 export async function GET() {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+    const session = await requireAuth();
+    if (!session) return unauthorized();
 
-    const settings = await db.siteSetting.findMany({
-      orderBy: [{ category: "asc" }, { key: "asc" }],
-    });
+    const sql = getSql();
+    const settings = await sql`
+      SELECT
+        id, key, value, category, description,
+        "isPublic", "createdAt", "updatedAt"
+      FROM "SiteSetting"
+      ORDER BY category ASC, key ASC
+    `;
 
     // Group by category
     const grouped: Record<string, typeof settings> = {};
@@ -30,10 +38,7 @@ export async function GET() {
     return NextResponse.json({ settings, grouped });
   } catch (error) {
     console.error("Settings GET error:", error);
-    return NextResponse.json(
-      { error: "Failed to fetch settings" },
-      { status: 500 }
-    );
+    return serverError("Failed to fetch settings");
   }
 }
 
@@ -41,40 +46,37 @@ export async function GET() {
 // Body: { settings: { [key: string]: string } }
 export async function PATCH(request: NextRequest) {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+    const session = await requireAuth();
+    if (!session) return unauthorized();
 
     const body = await request.json();
     const { settings } = body;
 
     if (!settings || typeof settings !== "object") {
-      return NextResponse.json(
-        { error: "Settings object is required" },
-        { status: 400 }
-      );
+      return badRequest("Settings object is required");
     }
 
-    // Update each setting in a transaction
-    const updates = await db.$transaction(
-      Object.entries(settings).map(([key, value]) =>
-        db.siteSetting.update({
-          where: { key },
-          data: { value: String(value) },
-        })
-      )
-    );
+    const sql = getSql();
+    const entries = Object.entries(settings);
+    let updatedCount = 0;
+
+    // Update each setting sequentially
+    for (const [key, value] of entries) {
+      const result = await sql`
+        UPDATE "SiteSetting"
+        SET value = ${String(value)}, "updatedAt" = NOW()
+        WHERE key = ${key}
+      `;
+      // result.count gives the number of affected rows
+      updatedCount += result.count;
+    }
 
     return NextResponse.json({
-      message: `Updated ${updates.length} settings`,
-      updated: updates.length,
+      message: `Updated ${updatedCount} settings`,
+      updated: updatedCount,
     });
   } catch (error) {
     console.error("Settings PATCH error:", error);
-    return NextResponse.json(
-      { error: "Failed to update settings" },
-      { status: 500 }
-    );
+    return serverError("Failed to update settings");
   }
 }

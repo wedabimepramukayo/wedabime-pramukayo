@@ -1,42 +1,52 @@
 /**
  * API: Pages — CRUD endpoints for dynamic page management
  * Wedabime Pramukayo CMS
+ *
+ * Uses @neondatabase/serverless directly (Prisma incompatible with CF Workers)
  */
 
-import { NextRequest, NextResponse } from "next/server";
-import { db } from "@/lib/db";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
+import { NextRequest } from "next/server";
+import {
+  getSql,
+  generateId,
+  requireAuth,
+  unauthorized,
+  badRequest,
+  conflict,
+  serverError,
+} from "@/lib/neon-sql";
 
 // GET /api/admin/pages — List all pages
 export async function GET() {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+    const session = await requireAuth();
+    if (!session) return unauthorized();
 
-    const pages = await db.page.findMany({
-      orderBy: { sortOrder: "asc" },
-    });
+    const sql = getSql();
+    const pages = await sql`
+      SELECT
+        id, slug, title,
+        "heroTitle", "heroSubtitle", "heroImageUrl",
+        content,
+        "metaTitle", "metaDesc", "metaKeywords", "ogImageUrl",
+        "isPublished", "publishedAt", "sortOrder",
+        "createdAt", "updatedAt"
+      FROM "Page"
+      ORDER BY "sortOrder" ASC
+    `;
 
-    return NextResponse.json({ pages });
+    return Response.json({ pages });
   } catch (error) {
     console.error("Pages GET error:", error);
-    return NextResponse.json(
-      { error: "Failed to fetch pages" },
-      { status: 500 }
-    );
+    return serverError("Failed to fetch pages");
   }
 }
 
 // POST /api/admin/pages — Create a new page
 export async function POST(request: NextRequest) {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+    const session = await requireAuth();
+    if (!session) return unauthorized();
 
     const body = await request.json();
     const {
@@ -55,45 +65,51 @@ export async function POST(request: NextRequest) {
     } = body;
 
     if (!slug || !title || !content) {
-      return NextResponse.json(
-        { error: "Slug, title, and content are required" },
-        { status: 400 }
-      );
+      return badRequest("Slug, title, and content are required");
     }
+
+    const sql = getSql();
 
     // Check for duplicate slug
-    const existing = await db.page.findUnique({ where: { slug } });
+    const [existing] = await sql`
+      SELECT id FROM "Page" WHERE slug = ${slug}
+    `;
     if (existing) {
-      return NextResponse.json(
-        { error: "A page with this slug already exists" },
-        { status: 409 }
-      );
+      return conflict("A page with this slug already exists");
     }
 
-    const page = await db.page.create({
-      data: {
-        slug,
-        title,
-        heroTitle: heroTitle || null,
-        heroSubtitle: heroSubtitle || null,
-        heroImageUrl: heroImageUrl || null,
-        content,
-        metaTitle: metaTitle || null,
-        metaDesc: metaDesc || null,
-        metaKeywords: metaKeywords || null,
-        ogImageUrl: ogImageUrl || null,
-        isPublished: isPublished ?? true,
-        publishedAt: isPublished ? new Date() : null,
-        sortOrder: sortOrder ?? 0,
-      },
-    });
+    const id = generateId();
+    const published = isPublished ?? true;
+    const order = sortOrder ?? 0;
 
-    return NextResponse.json({ page }, { status: 201 });
+    const [page] = await sql`
+      INSERT INTO "Page" (
+        id, slug, title,
+        "heroTitle", "heroSubtitle", "heroImageUrl",
+        content,
+        "metaTitle", "metaDesc", "metaKeywords", "ogImageUrl",
+        "isPublished", "publishedAt", "sortOrder",
+        "createdAt", "updatedAt"
+      ) VALUES (
+        ${id}, ${slug}, ${title},
+        ${heroTitle || null}, ${heroSubtitle || null}, ${heroImageUrl || null},
+        ${content},
+        ${metaTitle || null}, ${metaDesc || null}, ${metaKeywords || null}, ${ogImageUrl || null},
+        ${published}, ${published ? new Date() : null}, ${order},
+        NOW(), NOW()
+      )
+      RETURNING
+        id, slug, title,
+        "heroTitle", "heroSubtitle", "heroImageUrl",
+        content,
+        "metaTitle", "metaDesc", "metaKeywords", "ogImageUrl",
+        "isPublished", "publishedAt", "sortOrder",
+        "createdAt", "updatedAt"
+    `;
+
+    return Response.json({ page }, { status: 201 });
   } catch (error) {
     console.error("Pages POST error:", error);
-    return NextResponse.json(
-      { error: "Failed to create page" },
-      { status: 500 }
-    );
+    return serverError("Failed to create page");
   }
 }

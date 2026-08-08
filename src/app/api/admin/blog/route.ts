@@ -1,42 +1,50 @@
 /**
  * API: Blog Posts — CRUD endpoints for blog management
  * Wedabime Pramukayo CMS
+ * Uses @neondatabase/serverless directly (Cloudflare Workers compatible)
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { db } from "@/lib/db";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
+import {
+  getSql,
+  generateId,
+  requireAuth,
+  unauthorized,
+  badRequest,
+  conflict,
+  serverError,
+  jsonStringify,
+} from "@/lib/neon-sql";
 
 // GET /api/admin/blog — List all blog posts
 export async function GET() {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+    const session = await requireAuth();
+    if (!session) return unauthorized();
 
-    const posts = await db.blogPost.findMany({
-      orderBy: { updatedAt: "desc" },
-    });
+    const sql = getSql();
+    const posts = await sql`
+      SELECT
+        id, slug, title, excerpt, content,
+        "coverImageUrl", author, tags,
+        "metaTitle", "metaDesc", "metaKeywords", "ogImageUrl",
+        "isPublished", "publishedAt", "createdAt", "updatedAt"
+      FROM "BlogPost"
+      ORDER BY "updatedAt" DESC
+    `;
 
     return NextResponse.json({ posts });
   } catch (error) {
     console.error("Blog GET error:", error);
-    return NextResponse.json(
-      { error: "Failed to fetch blog posts" },
-      { status: 500 }
-    );
+    return serverError("Failed to fetch blog posts");
   }
 }
 
 // POST /api/admin/blog — Create a new blog post
 export async function POST(request: NextRequest) {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+    const session = await requireAuth();
+    if (!session) return unauthorized();
 
     const body = await request.json();
     const {
@@ -55,45 +63,46 @@ export async function POST(request: NextRequest) {
     } = body;
 
     if (!slug || !title || !content) {
-      return NextResponse.json(
-        { error: "Slug, title, and content are required" },
-        { status: 400 }
-      );
+      return badRequest("Slug, title, and content are required");
     }
+
+    const sql = getSql();
 
     // Check for duplicate slug
-    const existing = await db.blogPost.findUnique({ where: { slug } });
+    const [existing] = await sql`
+      SELECT id FROM "BlogPost" WHERE slug = ${slug}
+    `;
     if (existing) {
-      return NextResponse.json(
-        { error: "A blog post with this slug already exists" },
-        { status: 409 }
-      );
+      return conflict("A blog post with this slug already exists");
     }
 
-    const post = await db.blogPost.create({
-      data: {
-        slug,
-        title,
-        excerpt: excerpt || null,
-        content,
-        coverImageUrl: coverImageUrl || null,
-        author: author || session.user?.name || "Admin",
-        tags: tags ? (typeof tags === "object" ? JSON.stringify(tags) : tags) : null,
-        metaTitle: metaTitle || null,
-        metaDesc: metaDesc || null,
-        metaKeywords: metaKeywords || null,
-        ogImageUrl: ogImageUrl || null,
-        isPublished: isPublished ?? false,
-        publishedAt: isPublished ? new Date() : null,
-      },
-    });
+    const id = generateId();
+    const tagsValue = jsonStringify(tags);
+    const authorValue = author || session.user?.name || "Admin";
+    const published = isPublished ?? false;
+
+    const [post] = await sql`
+      INSERT INTO "BlogPost" (
+        id, slug, title, excerpt, content,
+        "coverImageUrl", author, tags,
+        "metaTitle", "metaDesc", "metaKeywords", "ogImageUrl",
+        "isPublished", "publishedAt", "createdAt", "updatedAt"
+      ) VALUES (
+        ${id}, ${slug}, ${title}, ${excerpt || null}, ${content},
+        ${coverImageUrl || null}, ${authorValue}, ${tagsValue},
+        ${metaTitle || null}, ${metaDesc || null}, ${metaKeywords || null}, ${ogImageUrl || null},
+        ${published}, ${published ? new Date().toISOString() : null}, NOW(), NOW()
+      )
+      RETURNING
+        id, slug, title, excerpt, content,
+        "coverImageUrl", author, tags,
+        "metaTitle", "metaDesc", "metaKeywords", "ogImageUrl",
+        "isPublished", "publishedAt", "createdAt", "updatedAt"
+    `;
 
     return NextResponse.json({ post }, { status: 201 });
   } catch (error) {
     console.error("Blog POST error:", error);
-    return NextResponse.json(
-      { error: "Failed to create blog post" },
-      { status: 500 }
-    );
+    return serverError("Failed to create blog post");
   }
 }

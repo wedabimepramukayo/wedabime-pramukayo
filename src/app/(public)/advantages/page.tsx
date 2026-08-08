@@ -7,7 +7,7 @@
 // Force dynamic rendering — page queries database at request time
 export const dynamic = 'force-dynamic';
 
-import { db } from "@/lib/db";
+import { getSql } from "@/lib/neon-sql";
 import Link from "next/link";
 import { ArrowRight } from "lucide-react";
 import { Breadcrumbs } from "@/components/public/breadcrumbs";
@@ -40,7 +40,13 @@ interface ContentSectionData {
 
 export async function generateMetadata() {
   try {
-    const page = await db.page.findUnique({ where: { slug: "advantages" } });
+    const sql = getSql();
+    const rows = await sql`
+      SELECT "metaTitle", "metaDesc"
+      FROM "Page"
+      WHERE slug = 'advantages'
+    `;
+    const page = rows[0] || null;
     return {
       title: page?.metaTitle || "Advantages | Why Choose i-Panel",
       description: page?.metaDesc || "Discover why i-Panel is the smartest choice — waterproof, fire-retardant, termite-proof, maintenance-free.",
@@ -59,16 +65,27 @@ export default async function AdvantagesPage() {
   let sectionsMap: Record<string, ContentSectionData> = {};
 
   try {
-    const [pageData, sections] = await Promise.all([
-      db.page.findUnique({ where: { slug: "advantages" } }),
-      db.contentSection.findMany({
-        where: { pageSlug: "advantages", isActive: true },
-        orderBy: { sortOrder: "asc" },
-      }),
+    const sql = getSql();
+
+    const [pageRows, sectionsRows] = await Promise.all([
+      sql`
+        SELECT id, slug, title, "heroTitle", "heroSubtitle", "heroImageUrl",
+               content, "metaTitle", "metaDesc", "metaKeywords", "ogImageUrl",
+               "isPublished", "publishedAt", "sortOrder", "createdAt", "updatedAt"
+        FROM "Page"
+        WHERE slug = 'advantages'
+      `,
+      sql`
+        SELECT id, "sectionKey", type, title, subtitle, content, items, "imageUrl",
+               "linkUrl", "linkText", "sortOrder", "isActive", settings
+        FROM "ContentSection"
+        WHERE "pageSlug" = 'advantages' AND "isActive" = true
+        ORDER BY "sortOrder" ASC
+      `,
     ]);
 
-    page = pageData;
-    sections.forEach((s) => {
+    page = pageRows[0] || null;
+    sectionsRows.forEach((s: any) => {
       sectionsMap[s.sectionKey] = {
         ...s,
         items: s.items as SectionItem[] | null,

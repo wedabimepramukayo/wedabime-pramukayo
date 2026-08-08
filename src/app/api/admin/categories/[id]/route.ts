@@ -1,12 +1,19 @@
 /**
  * API: Single Category — GET, PUT, DELETE by ID
  * Wedabime Pramukayo CMS
+ *
+ * Converted from Prisma to Neon direct SQL for Cloudflare Workers compatibility.
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { db } from "@/lib/db";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
+import {
+  getSql,
+  requireAuth,
+  unauthorized,
+  notFound,
+  conflict,
+  serverError,
+} from "@/lib/neon-sql";
 
 // GET /api/admin/categories/[id]
 export async function GET(
@@ -14,28 +21,65 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+    const session = await requireAuth();
+    if (!session) return unauthorized();
 
     const { id } = await params;
-    const category = await db.productCategory.findUnique({
-      where: { id },
-      include: {
-        _count: { select: { products: true } },
-        products: { select: { id: true, name: true, slug: true }, orderBy: { sortOrder: "asc" } },
-      },
-    });
+    const sql = getSql();
 
-    if (!category) {
-      return NextResponse.json({ error: "Category not found" }, { status: 404 });
+    // Fetch category with product count
+    const [categoryRow] = await sql`
+      SELECT
+        c.id,
+        c.slug,
+        c.name,
+        c.description,
+        c.icon,
+        c."imageUrl",
+        c."sortOrder",
+        c."isActive",
+        c."createdAt",
+        c."updatedAt",
+        COUNT(p.id) AS "_count_products"
+      FROM "ProductCategory" c
+      LEFT JOIN "Product" p ON p."categoryId" = c.id
+      WHERE c.id = ${id}
+      GROUP BY c.id
+    `;
+
+    if (!categoryRow) {
+      return notFound("Category not found");
     }
+
+    // Fetch products in this category
+    const products = await sql`
+      SELECT id, name, slug
+      FROM "Product"
+      WHERE "categoryId" = ${id}
+      ORDER BY "sortOrder" ASC
+    `;
+
+    const category = {
+      id: categoryRow.id,
+      slug: categoryRow.slug,
+      name: categoryRow.name,
+      description: categoryRow.description,
+      icon: categoryRow.icon,
+      imageUrl: categoryRow.imageUrl,
+      sortOrder: categoryRow.sortOrder,
+      isActive: categoryRow.isActive,
+      createdAt: categoryRow.createdAt,
+      updatedAt: categoryRow.updatedAt,
+      _count: {
+        products: Number(categoryRow._count_products),
+      },
+      products,
+    };
 
     return NextResponse.json({ category });
   } catch (error) {
     console.error("Category GET error:", error);
-    return NextResponse.json({ error: "Failed to fetch category" }, { status: 500 });
+    return serverError("Failed to fetch category");
   }
 }
 
@@ -45,43 +89,60 @@ export async function PUT(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+    const session = await requireAuth();
+    if (!session) return unauthorized();
 
     const { id } = await params;
     const body = await request.json();
+    const sql = getSql();
 
-    const existing = await db.productCategory.findUnique({ where: { id } });
+    // Check category exists
+    const [existing] = await sql`
+      SELECT id, slug FROM "ProductCategory" WHERE id = ${id}
+    `;
     if (!existing) {
-      return NextResponse.json({ error: "Category not found" }, { status: 404 });
+      return notFound("Category not found");
     }
 
+    // Check slug conflict if changing slug
     if (body.slug && body.slug !== existing.slug) {
-      const slugConflict = await db.productCategory.findUnique({ where: { slug: body.slug } });
+      const [slugConflict] = await sql`
+        SELECT id FROM "ProductCategory" WHERE slug = ${body.slug}
+      `;
       if (slugConflict) {
-        return NextResponse.json({ error: "A category with this slug already exists" }, { status: 409 });
+        return conflict("A category with this slug already exists");
       }
     }
 
-    const category = await db.productCategory.update({
-      where: { id },
-      data: {
-        ...(body.slug !== undefined && { slug: body.slug }),
-        ...(body.name !== undefined && { name: body.name }),
-        ...(body.description !== undefined && { description: body.description || null }),
-        ...(body.icon !== undefined && { icon: body.icon || null }),
-        ...(body.imageUrl !== undefined && { imageUrl: body.imageUrl || null }),
-        ...(body.sortOrder !== undefined && { sortOrder: body.sortOrder }),
-        ...(body.isActive !== undefined && { isActive: body.isActive }),
-      },
-    });
+    // Determine which fields to update
+    const hasSlug = body.slug !== undefined;
+    const hasName = body.name !== undefined;
+    const hasDescription = body.description !== undefined;
+    const hasIcon = body.icon !== undefined;
+    const hasImageUrl = body.imageUrl !== undefined;
+    const hasSortOrder = body.sortOrder !== undefined;
+    const hasIsActive = body.isActive !== undefined;
+
+    const [category] = await sql`
+      UPDATE "ProductCategory"
+      SET
+        slug        = CASE WHEN ${hasSlug} THEN ${body.slug ?? null} ELSE slug END,
+        name        = CASE WHEN ${hasName} THEN ${body.name ?? null} ELSE name END,
+        description = CASE WHEN ${hasDescription} THEN ${body.description || null} ELSE description END,
+        icon        = CASE WHEN ${hasIcon} THEN ${body.icon || null} ELSE icon END,
+        "imageUrl"  = CASE WHEN ${hasImageUrl} THEN ${body.imageUrl || null} ELSE "imageUrl" END,
+        "sortOrder" = CASE WHEN ${hasSortOrder} THEN ${body.sortOrder ?? 0} ELSE "sortOrder" END,
+        "isActive"  = CASE WHEN ${hasIsActive} THEN ${body.isActive ?? true} ELSE "isActive" END,
+        "updatedAt" = NOW()
+      WHERE id = ${id}
+      RETURNING
+        id, slug, name, description, icon, "imageUrl", "sortOrder", "isActive", "createdAt", "updatedAt"
+    `;
 
     return NextResponse.json({ category });
   } catch (error) {
     console.error("Category PUT error:", error);
-    return NextResponse.json({ error: "Failed to update category" }, { status: 500 });
+    return serverError("Failed to update category");
   }
 }
 
@@ -91,32 +152,41 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+    const session = await requireAuth();
+    if (!session) return unauthorized();
 
     const { id } = await params;
-    const existing = await db.productCategory.findUnique({
-      where: { id },
-      include: { _count: { select: { products: true } } },
-    });
+    const sql = getSql();
+
+    // Check category exists with product count
+    const [existing] = await sql`
+      SELECT
+        c.id,
+        COUNT(p.id) AS "_count_products"
+      FROM "ProductCategory" c
+      LEFT JOIN "Product" p ON p."categoryId" = c.id
+      WHERE c.id = ${id}
+      GROUP BY c.id
+    `;
 
     if (!existing) {
-      return NextResponse.json({ error: "Category not found" }, { status: 404 });
+      return notFound("Category not found");
     }
 
-    if (existing._count.products > 0) {
-      return NextResponse.json(
-        { error: `Cannot delete category with ${existing._count.products} services. Reassign or delete them first.` },
-        { status: 409 }
+    const productCount = Number(existing._count_products);
+    if (productCount > 0) {
+      return conflict(
+        `Cannot delete category with ${productCount} services. Reassign or delete them first.`
       );
     }
 
-    await db.productCategory.delete({ where: { id } });
+    await sql`
+      DELETE FROM "ProductCategory" WHERE id = ${id}
+    `;
+
     return NextResponse.json({ message: "Category deleted successfully" });
   } catch (error) {
     console.error("Category DELETE error:", error);
-    return NextResponse.json({ error: "Failed to delete category" }, { status: 500 });
+    return serverError("Failed to delete category");
   }
 }

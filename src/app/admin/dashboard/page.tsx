@@ -1,15 +1,14 @@
+"use client";
+
 /**
  * Admin Dashboard — Wedabime Pramukayo CMS
- * Overview page with key metrics, recent activity, and quick actions
+ * Client-side dashboard with stats, recent activity, and quick actions
+ * Fetches data from API endpoints (no server-side Prisma)
  */
 
-// Force dynamic rendering — dashboard queries database at request time
-export const dynamic = 'force-dynamic';
-
-import { db } from "@/lib/db";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
-import { redirect } from "next/navigation";
+import { useState, useEffect } from "react";
+import { useSession } from "next-auth/react";
+import { useRouter } from "next/navigation";
 import {
   FileText,
   Package,
@@ -24,54 +23,93 @@ import {
   Eye,
   Award,
   Inbox,
+  Loader2,
 } from "lucide-react";
 import Link from "next/link";
 
-export default async function AdminDashboard() {
-  const session = await getServerSession(authOptions);
-  if (!session) redirect("/admin/login");
+interface PageItem { id: string; title: string; slug: string; isPublished: boolean; updatedAt: string; }
+interface ServiceItem { id: string; name: string; slug: string; isFeatured: boolean; isPublished: boolean; updatedAt: string; category?: { name: string } | null; }
+interface PostItem { id: string; title: string; slug: string; isPublished: boolean; updatedAt: string; }
+interface MessageItem { id: string; name: string; subject: string; createdAt: string; }
 
-  // Fetch dashboard stats
-  const [
-    pageCount,
-    serviceCount,
-    categoryCount,
-    blogCount,
-    settingsCount,
-    publishedPages,
-    publishedServices,
-    publishedPosts,
-    unreadMessages,
-    recentServices,
-    recentPosts,
-    recentMessages,
-  ] = await Promise.all([
-    db.page.count(),
-    db.product.count(),
-    db.productCategory.count(),
-    db.blogPost.count(),
-    db.siteSetting.count(),
-    db.page.count({ where: { isPublished: true } }),
-    db.product.count({ where: { isPublished: true } }),
-    db.blogPost.count({ where: { isPublished: true } }),
-    db.contactSubmission.count({ where: { isRead: false } }),
-    db.product.findMany({
-      take: 5,
-      orderBy: { updatedAt: "desc" },
-      select: { id: true, name: true, slug: true, isFeatured: true, updatedAt: true, category: { select: { name: true } } },
-    }),
-    db.blogPost.findMany({
-      take: 5,
-      orderBy: { updatedAt: "desc" },
-      select: { id: true, title: true, slug: true, isPublished: true, updatedAt: true },
-    }),
-    db.contactSubmission.findMany({
-      take: 5,
-      where: { isRead: false },
-      orderBy: { createdAt: "desc" },
-      select: { id: true, name: true, subject: true, createdAt: true },
-    }),
-  ]);
+export default function AdminDashboard() {
+  const { data: session, status } = useSession();
+  const router = useRouter();
+
+  const [loading, setLoading] = useState(true);
+  const [pageCount, setPageCount] = useState(0);
+  const [serviceCount, setServiceCount] = useState(0);
+  const [categoryCount, setCategoryCount] = useState(0);
+  const [blogCount, setBlogCount] = useState(0);
+  const [publishedPages, setPublishedPages] = useState(0);
+  const [publishedServices, setPublishedServices] = useState(0);
+  const [publishedPosts, setPublishedPosts] = useState(0);
+  const [unreadMessages, setUnreadMessages] = useState(0);
+  const [recentServices, setRecentServices] = useState<ServiceItem[]>([]);
+  const [recentPosts, setRecentPosts] = useState<PostItem[]>([]);
+  const [recentMessages, setRecentMessages] = useState<MessageItem[]>([]);
+
+  useEffect(() => {
+    if (status === "unauthenticated") {
+      router.push("/admin/login");
+      return;
+    }
+    if (status !== "authenticated") return;
+
+    async function fetchDashboardData() {
+      try {
+        const [pagesRes, servicesRes, categoriesRes, blogRes, contactRes] = await Promise.all([
+          fetch("/api/admin/pages"),
+          fetch("/api/admin/services"),
+          fetch("/api/admin/categories"),
+          fetch("/api/admin/blog"),
+          fetch("/api/admin/contact?limit=5&unread=true"),
+        ]);
+
+        const [pagesData, servicesData, categoriesData, blogData, contactData] = await Promise.all([
+          pagesRes.ok ? pagesRes.json() : { pages: [] },
+          servicesRes.ok ? servicesRes.json() : { services: [] },
+          categoriesRes.ok ? categoriesRes.json() : { categories: [] },
+          blogRes.ok ? blogRes.json() : { posts: [] },
+          contactRes.ok ? contactRes.json() : { submissions: [], unreadCount: 0 },
+        ]);
+
+        const pages: PageItem[] = pagesData.pages || [];
+        const services: ServiceItem[] = servicesData.services || [];
+        const categories = categoriesData.categories || [];
+        const posts: PostItem[] = blogData.posts || [];
+        const messages: MessageItem[] = contactData.submissions || [];
+
+        setPageCount(pages.length);
+        setServiceCount(services.length);
+        setCategoryCount(categories.length);
+        setBlogCount(posts.length);
+        setPublishedPages(pages.filter((p: PageItem) => p.isPublished).length);
+        setPublishedServices(services.filter((s: ServiceItem) => s.isPublished).length);
+        setPublishedPosts(posts.filter((p: PostItem) => p.isPublished).length);
+        setUnreadMessages(contactData.unreadCount || 0);
+
+        // Recent items (sorted by updatedAt desc - API already returns them sorted)
+        setRecentServices(services.slice(0, 5));
+        setRecentPosts(posts.slice(0, 5));
+        setRecentMessages(messages.slice(0, 5));
+      } catch (err) {
+        console.error("Dashboard fetch error:", err);
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    fetchDashboardData();
+  }, [status, router]);
+
+  if (loading || status !== "authenticated") {
+    return (
+      <div className="flex items-center justify-center py-20">
+        <Loader2 className="h-8 w-8 animate-spin text-brand-primary" />
+      </div>
+    );
+  }
 
   const statsCards = [
     {
@@ -137,7 +175,7 @@ export default async function AdminDashboard() {
           <div className="flex items-start justify-between">
             <div>
               <h1 className="text-2xl md:text-3xl font-bold">
-                Welcome back, {session.user?.name || "Admin"} 👋
+                Welcome back, {session?.user?.name || "Admin"} 👋
               </h1>
               <p className="text-brand-sage/80 mt-2 max-w-lg">
                 Manage your Wedabime Pramukayo website content, services, and settings from this dashboard.

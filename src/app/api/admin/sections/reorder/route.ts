@@ -5,37 +5,40 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { db } from "@/lib/db";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
+import {
+  getSql,
+  requireAuth,
+  unauthorized,
+  badRequest,
+  serverError,
+} from "@/lib/neon-sql";
 
 export async function POST(request: NextRequest) {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+    const session = await requireAuth();
+    if (!session) return unauthorized();
 
     const body = await request.json();
     const { items }: { items: { id: string; sortOrder: number }[] } = body;
 
     if (!items || !Array.isArray(items)) {
-      return NextResponse.json({ error: "items array is required" }, { status: 400 });
+      return badRequest("items array is required");
     }
 
-    // Update sortOrder for each item in a transaction
-    await db.$transaction(
-      items.map((item) =>
-        db.contentSection.update({
-          where: { id: item.id },
-          data: { sortOrder: item.sortOrder },
-        })
-      )
-    );
+    const sql = getSql();
+
+    // Run sequential UPDATEs (no transaction needed for simple sort order updates)
+    for (const item of items) {
+      await sql`
+        UPDATE "ContentSection"
+        SET "sortOrder" = ${item.sortOrder}, "updatedAt" = NOW()
+        WHERE id = ${item.id}
+      `;
+    }
 
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error("Sections reorder error:", error);
-    return NextResponse.json({ error: "Failed to reorder sections" }, { status: 500 });
+    return serverError("Failed to reorder sections");
   }
 }

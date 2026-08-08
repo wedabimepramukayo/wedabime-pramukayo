@@ -5,7 +5,7 @@
 // Force dynamic rendering — page queries database at request time
 export const dynamic = 'force-dynamic';
 
-import { db } from "@/lib/db";
+import { getSql } from "@/lib/neon-sql";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeft, Calendar, User, Tag } from "lucide-react";
@@ -14,7 +14,20 @@ import { Breadcrumbs } from "@/components/public/breadcrumbs";
 export const revalidate = 60;
 
 async function getPost(slug: string) {
-  return db.blogPost.findUnique({ where: { slug, isPublished: true } });
+  try {
+    const sql = getSql();
+    const rows = await sql`
+      SELECT id, slug, title, excerpt, content, "coverImageUrl", author, tags,
+             "metaTitle", "metaDesc", "metaKeywords", "ogImageUrl",
+             "isPublished", "publishedAt", "createdAt", "updatedAt"
+      FROM "BlogPost"
+      WHERE slug = ${slug} AND "isPublished" = true
+    `;
+    return rows[0] || null;
+  } catch (error) {
+    console.error("Failed to fetch blog post:", error);
+    return null;
+  }
 }
 
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }) {

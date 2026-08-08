@@ -6,7 +6,7 @@
 
 import Link from "next/link";
 import Image from "next/image";
-import { db } from "@/lib/db";
+import { getSql } from "@/lib/neon-sql";
 import {
   MapPin,
   Clock,
@@ -41,13 +41,15 @@ export const revalidate = 300;
 
 async function getFooterData() {
   try {
-    const settings = await db.siteSetting.findMany({
-      where: { isPublic: true },
-      select: { key: true, value: true, category: true },
-    });
+    const sql = getSql();
+    const rows = await sql`
+      SELECT key, value, category
+      FROM "SiteSetting"
+      WHERE "isPublic" = true
+    `;
 
     const grouped: Record<string, Record<string, string>> = {};
-    settings.forEach((s) => {
+    rows.forEach((s: any) => {
       if (!grouped[s.category]) grouped[s.category] = {};
       grouped[s.category][s.key] = s.value;
     });

@@ -3,7 +3,7 @@
  * CMS-driven contact page with form, business information from ContentSection
  */
 
-import { db } from "@/lib/db";
+import { getSql } from "@/lib/neon-sql";
 import { Breadcrumbs } from "@/components/public/breadcrumbs";
 import { getIcon } from "@/lib/icon-map";
 import ContactClient from "./contact-client";
@@ -41,12 +41,16 @@ export default async function ContactPage() {
   let sectionsMap: Record<string, ContentSectionData> = {};
 
   try {
-    const sections = await db.contentSection.findMany({
-      where: { pageSlug: "contact", isActive: true },
-      orderBy: { sortOrder: "asc" },
-    });
+    const sql = getSql();
+    const sectionsRows = await sql`
+      SELECT id, "sectionKey", type, title, subtitle, content, items, "imageUrl",
+             "linkUrl", "linkText", "sortOrder", "isActive", settings
+      FROM "ContentSection"
+      WHERE "pageSlug" = 'contact' AND "isActive" = true
+      ORDER BY "sortOrder" ASC
+    `;
 
-    sections.forEach((s) => {
+    sectionsRows.forEach((s: any) => {
       sectionsMap[s.sectionKey] = {
         ...s,
         items: s.items as SectionItem[] | null,

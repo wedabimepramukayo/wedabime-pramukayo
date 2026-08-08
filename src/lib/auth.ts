@@ -1,12 +1,16 @@
 /**
  * NextAuth Configuration — Wedabime Pramukayo CMS
- * Uses Credentials provider with bcrypt password verification
- * Session strategy: JWT (Edge-compatible for Cloudflare Pages)
+ * Uses Credentials provider with PBKDF2 password verification
+ * Session strategy: JWT (Edge-compatible for Cloudflare Workers)
+ *
+ * Password hashing: PBKDF2 via Web Crypto API (crypto.subtle)
+ * - Works on both Cloudflare Workers (Edge) and Node.js
+ * - Also supports legacy bcrypt hashes for migration
  */
 
 import { NextAuthOptions } from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
-import bcrypt from "bcryptjs";
+import { verifyPassword } from "@/lib/password-utils";
 import { neon } from "@neondatabase/serverless";
 
 // Helper: get Neon SQL function (lightweight HTTP client, no Prisma engine)
@@ -37,7 +41,7 @@ if (!isBuildPhase && (!process.env.AUTH_SECRET || PLACEHOLDER_SECRETS.includes(p
   }
   // In development, warn but don't crash
   console.warn(
-    "⚠️ AUTH_SECRET is not set or uses a placeholder value. " +
+    "AUTH_SECRET is not set or uses a placeholder value. " +
     "This is insecure for production. Set a strong random value."
   );
 }
@@ -81,8 +85,8 @@ export const authOptions: NextAuthOptions = {
           throw new Error("Account is deactivated. Contact administrator.");
         }
 
-        // Verify password
-        const isValidPassword = await bcrypt.compare(
+        // Verify password using PBKDF2 (Web Crypto API) or legacy bcrypt
+        const isValidPassword = await verifyPassword(
           credentials.password,
           user.passwordHash
         );

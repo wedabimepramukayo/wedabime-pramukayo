@@ -5,7 +5,7 @@
  */
 
 import { NextResponse } from "next/server";
-import { neon } from "@/lib/db";
+import { neon } from "@neondatabase/serverless";
 
 // Force dynamic rendering — no prerendering at build time
 export const dynamic = 'force-dynamic';

@@ -5,7 +5,7 @@
 // Force dynamic rendering — page queries database at request time
 export const dynamic = 'force-dynamic';
 
-import { db } from "@/lib/db";
+import { getSql } from "@/lib/neon-sql";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowRight, CheckCircle, Star, ArrowLeft, Shield, Award } from "lucide-react";
@@ -15,10 +15,27 @@ export const revalidate = 60;
 
 async function getService(slug: string) {
   try {
-    return await db.product.findUnique({
-      where: { slug, isPublished: true },
-      include: { category: { select: { name: true, slug: true } } },
-    });
+    const sql = getSql();
+    const rows = await sql`
+      SELECT p.id, p.slug, p.name, p.subtitle, p.description, p.features,
+             p.advantages, p.specifications, p."mainImageUrl", p.gallery,
+             p."categoryId", p."metaTitle", p."metaDesc", p."metaKeywords",
+             p."ogImageUrl", p."isFeatured", p."isPublished", p."publishedAt",
+             p."sortOrder", p."createdAt", p."updatedAt",
+             c.name AS "category.name", c.slug AS "category.slug"
+      FROM "Product" p
+      LEFT JOIN "ProductCategory" c ON p."categoryId" = c.id
+      WHERE p.slug = ${slug} AND p."isPublished" = true
+    `;
+
+    if (rows.length === 0) return null;
+
+    const row = rows[0] as any;
+    const { 'category.name': catName, 'category.slug': catSlug, ...rest } = row;
+    return {
+      ...rest,
+      category: catName ? { name: catName, slug: catSlug } : null,
+    };
   } catch (error) {
     console.error("Failed to fetch service:", error);
     return null as any;
@@ -50,10 +67,26 @@ export default async function ServiceDetailPage({ params }: { params: Promise<{ 
 
   let related: any[] = [];
   try {
-    related = await db.product.findMany({
-      where: { isPublished: true, categoryId: service.categoryId, id: { not: service.id } },
-      take: 3, orderBy: { sortOrder: "asc" },
-      include: { category: { select: { name: true } } },
+    const sql = getSql();
+    const relatedRows = await sql`
+      SELECT p.id, p.slug, p.name, p.subtitle, p.description, p.features,
+             p.advantages, p.specifications, p."mainImageUrl", p.gallery,
+             p."categoryId", p."metaTitle", p."metaDesc", p."metaKeywords",
+             p."ogImageUrl", p."isFeatured", p."isPublished", p."publishedAt",
+             p."sortOrder", p."createdAt", p."updatedAt",
+             c.name AS "category.name"
+      FROM "Product" p
+      LEFT JOIN "ProductCategory" c ON p."categoryId" = c.id
+      WHERE p."isPublished" = true
+        AND p."categoryId" = ${service.categoryId}
+        AND p.id != ${service.id}
+      ORDER BY p."sortOrder" ASC
+      LIMIT 3
+    `;
+
+    related = relatedRows.map((row: any) => {
+      const { 'category.name': catName, ...rest } = row;
+      return { ...rest, category: catName ? { name: catName } : null };
     });
   } catch (error) {
     console.error("Failed to fetch related services:", error);

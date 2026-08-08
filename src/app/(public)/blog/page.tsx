@@ -6,7 +6,7 @@
 // Force dynamic rendering — page queries database at request time
 export const dynamic = 'force-dynamic';
 
-import { db } from "@/lib/db";
+import { getSql } from "@/lib/neon-sql";
 import Link from "next/link";
 import { Calendar, User, ArrowRight, Tag, NotebookPen } from "lucide-react";
 import { Breadcrumbs } from "@/components/public/breadcrumbs";
@@ -28,18 +28,27 @@ export default async function BlogPage() {
   let heroSection: any = null;
 
   try {
-    const [postsData, sections] = await Promise.all([
-      db.blogPost.findMany({
-        where: { isPublished: true },
-        orderBy: { publishedAt: "desc" },
-      }),
-      db.contentSection.findMany({
-        where: { pageSlug: "blog", isActive: true },
-        orderBy: { sortOrder: "asc" },
-      }),
+    const sql = getSql();
+
+    const [postsRows, sectionsRows] = await Promise.all([
+      sql`
+        SELECT id, slug, title, excerpt, content, "coverImageUrl", author, tags,
+               "metaTitle", "metaDesc", "metaKeywords", "ogImageUrl",
+               "isPublished", "publishedAt", "createdAt", "updatedAt"
+        FROM "BlogPost"
+        WHERE "isPublished" = true
+        ORDER BY "publishedAt" DESC
+      `,
+      sql`
+        SELECT id, "sectionKey", type, title, subtitle, content, items, "imageUrl",
+               "linkUrl", "linkText", "sortOrder", "isActive", settings
+        FROM "ContentSection"
+        WHERE "pageSlug" = 'blog' AND "isActive" = true
+        ORDER BY "sortOrder" ASC
+      `,
     ]);
-    posts = postsData;
-    heroSection = sections.find((s) => s.sectionKey === "hero");
+    posts = postsRows;
+    heroSection = sectionsRows.find((s: any) => s.sectionKey === "hero");
   } catch (error) {
     console.error("Failed to fetch blog posts:", error);
     posts = [] as any;

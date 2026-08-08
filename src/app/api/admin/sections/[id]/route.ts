@@ -4,9 +4,21 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { db } from "@/lib/db";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
+import {
+  getSql,
+  requireAuth,
+  unauthorized,
+  notFound,
+  conflict,
+  serverError,
+  jsonStringify,
+} from "@/lib/neon-sql";
+
+const SELECT_COLUMNS = `
+  id, "pageSlug", "sectionKey", type, title, subtitle, content,
+  items, "imageUrl", "linkUrl", "linkText", "sortOrder",
+  "isActive", settings, "createdAt", "updatedAt"
+`;
 
 // GET /api/admin/sections/[id]
 export async function GET(
@@ -14,22 +26,22 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+    const session = await requireAuth();
+    if (!session) return unauthorized();
 
     const { id } = await params;
-    const section = await db.contentSection.findUnique({ where: { id } });
+    const sql = getSql();
 
-    if (!section) {
-      return NextResponse.json({ error: "Section not found" }, { status: 404 });
-    }
+    const [section] = await sql`
+      SELECT ${sql.unsafe(SELECT_COLUMNS)} FROM "ContentSection" WHERE id = ${id}
+    `;
+
+    if (!section) return notFound("Section not found");
 
     return NextResponse.json({ section });
   } catch (error) {
     console.error("Section GET error:", error);
-    return NextResponse.json({ error: "Failed to fetch section" }, { status: 500 });
+    return serverError("Failed to fetch section");
   }
 }
 
@@ -39,60 +51,76 @@ export async function PUT(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+    const session = await requireAuth();
+    if (!session) return unauthorized();
 
     const { id } = await params;
     const body = await request.json();
+    const sql = getSql();
 
     // Check if section exists
-    const existing = await db.contentSection.findUnique({ where: { id } });
-    if (!existing) {
-      return NextResponse.json({ error: "Section not found" }, { status: 404 });
-    }
+    const [existing] = await sql`
+      SELECT ${sql.unsafe(SELECT_COLUMNS)} FROM "ContentSection" WHERE id = ${id}
+    `;
+    if (!existing) return notFound("Section not found");
 
     // If sectionKey or pageSlug is being changed, check for unique constraint
     if (body.sectionKey || body.pageSlug) {
-      const newPageSlug = body.pageSlug || existing.pageSlug;
-      const newSectionKey = body.sectionKey || existing.sectionKey;
+      const newPageSlug = body.pageSlug ?? existing.pageSlug;
+      const newSectionKey = body.sectionKey ?? existing.sectionKey;
       if (newPageSlug !== existing.pageSlug || newSectionKey !== existing.sectionKey) {
-        const duplicate = await db.contentSection.findUnique({
-          where: { pageSlug_sectionKey: { pageSlug: newPageSlug, sectionKey: newSectionKey } },
-        });
+        const [duplicate] = await sql`
+          SELECT id FROM "ContentSection"
+          WHERE "pageSlug" = ${newPageSlug} AND "sectionKey" = ${newSectionKey}
+        `;
         if (duplicate) {
-          return NextResponse.json(
-            { error: "A section with this pageSlug + sectionKey already exists" },
-            { status: 409 }
-          );
+          return conflict("A section with this pageSlug + sectionKey already exists");
         }
       }
     }
 
-    const section = await db.contentSection.update({
-      where: { id },
-      data: {
-        ...(body.pageSlug !== undefined && { pageSlug: body.pageSlug }),
-        ...(body.sectionKey !== undefined && { sectionKey: body.sectionKey }),
-        ...(body.type !== undefined && { type: body.type }),
-        ...(body.title !== undefined && { title: body.title || null }),
-        ...(body.subtitle !== undefined && { subtitle: body.subtitle || null }),
-        ...(body.content !== undefined && { content: body.content || null }),
-        ...(body.items !== undefined && { items: body.items || null }),
-        ...(body.imageUrl !== undefined && { imageUrl: body.imageUrl || null }),
-        ...(body.linkUrl !== undefined && { linkUrl: body.linkUrl || null }),
-        ...(body.linkText !== undefined && { linkText: body.linkText || null }),
-        ...(body.sortOrder !== undefined && { sortOrder: body.sortOrder }),
-        ...(body.isActive !== undefined && { isActive: body.isActive }),
-        ...(body.settings !== undefined && { settings: body.settings || null }),
-      },
-    });
+    // Build dynamic SET clauses
+    const setClauses: string[] = [];
+    const values: unknown[] = [];
+
+    const addField = (column: string, value: unknown) => {
+      setClauses.push(`${column} = $${values.length + 1}`);
+      values.push(value);
+    };
+
+    if (body.pageSlug !== undefined) addField('"pageSlug"', body.pageSlug);
+    if (body.sectionKey !== undefined) addField('"sectionKey"', body.sectionKey);
+    if (body.type !== undefined) addField("type", body.type);
+    if (body.title !== undefined) addField("title", body.title || null);
+    if (body.subtitle !== undefined) addField("subtitle", body.subtitle || null);
+    if (body.content !== undefined) addField("content", body.content || null);
+    if (body.items !== undefined) addField("items", jsonStringify(body.items || null));
+    if (body.imageUrl !== undefined) addField('"imageUrl"', body.imageUrl || null);
+    if (body.linkUrl !== undefined) addField('"linkUrl"', body.linkUrl || null);
+    if (body.linkText !== undefined) addField('"linkText"', body.linkText || null);
+    if (body.sortOrder !== undefined) addField('"sortOrder"', body.sortOrder);
+    if (body.isActive !== undefined) addField('"isActive"', body.isActive);
+    if (body.settings !== undefined) addField("settings", jsonStringify(body.settings || null));
+
+    // Always touch updatedAt
+    setClauses.push(`"updatedAt" = NOW()`);
+
+    const setSql = setClauses.join(", ");
+    const fullSql = `
+      UPDATE "ContentSection"
+      SET ${setSql}
+      WHERE id = $${values.length + 1}
+      RETURNING ${SELECT_COLUMNS}
+    `;
+    values.push(id);
+
+    const rows = await sql.unsafe(fullSql, values);
+    const section = rows[0];
 
     return NextResponse.json({ section });
   } catch (error) {
     console.error("Section PUT error:", error);
-    return NextResponse.json({ error: "Failed to update section" }, { status: 500 });
+    return serverError("Failed to update section");
   }
 }
 
@@ -102,23 +130,22 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+    const session = await requireAuth();
+    if (!session) return unauthorized();
 
     const { id } = await params;
+    const sql = getSql();
 
-    const existing = await db.contentSection.findUnique({ where: { id } });
-    if (!existing) {
-      return NextResponse.json({ error: "Section not found" }, { status: 404 });
-    }
+    const [existing] = await sql`
+      SELECT id FROM "ContentSection" WHERE id = ${id}
+    `;
+    if (!existing) return notFound("Section not found");
 
-    await db.contentSection.delete({ where: { id } });
+    await sql`DELETE FROM "ContentSection" WHERE id = ${id}`;
 
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error("Section DELETE error:", error);
-    return NextResponse.json({ error: "Failed to delete section" }, { status: 500 });
+    return serverError("Failed to delete section");
   }
 }

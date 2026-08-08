@@ -6,7 +6,7 @@
 // Force dynamic rendering — page queries database at request time
 export const dynamic = 'force-dynamic';
 
-import { db } from "@/lib/db";
+import { getSql } from "@/lib/neon-sql";
 import Link from "next/link";
 import { ArrowRight } from "lucide-react";
 import { Breadcrumbs } from "@/components/public/breadcrumbs";
@@ -41,16 +41,29 @@ interface ContentSectionData {
 
 async function getAboutData() {
   try {
-    const [page, sections] = await Promise.all([
-      db.page.findUnique({ where: { slug: "about" } }),
-      db.contentSection.findMany({
-        where: { pageSlug: "about", isActive: true },
-        orderBy: { sortOrder: "asc" },
-      }),
+    const sql = getSql();
+
+    const [pageRows, sectionsRows] = await Promise.all([
+      sql`
+        SELECT id, slug, title, "heroTitle", "heroSubtitle", "heroImageUrl",
+               content, "metaTitle", "metaDesc", "metaKeywords", "ogImageUrl",
+               "isPublished", "publishedAt", "sortOrder", "createdAt", "updatedAt"
+        FROM "Page"
+        WHERE slug = 'about'
+      `,
+      sql`
+        SELECT id, "sectionKey", type, title, subtitle, content, items, "imageUrl",
+               "linkUrl", "linkText", "sortOrder", "isActive", settings
+        FROM "ContentSection"
+        WHERE "pageSlug" = 'about' AND "isActive" = true
+        ORDER BY "sortOrder" ASC
+      `,
     ]);
 
+    const page = pageRows[0] || null;
+
     const sectionsMap: Record<string, ContentSectionData> = {};
-    sections.forEach((s) => {
+    sectionsRows.forEach((s: any) => {
       sectionsMap[s.sectionKey] = {
         ...s,
         items: s.items as SectionItem[] | null,
@@ -67,7 +80,13 @@ async function getAboutData() {
 
 export async function generateMetadata() {
   try {
-    const page = await db.page.findUnique({ where: { slug: "about" } });
+    const sql = getSql();
+    const rows = await sql`
+      SELECT "metaTitle", "metaDesc"
+      FROM "Page"
+      WHERE slug = 'about'
+    `;
+    const page = rows[0] || null;
     return {
       title: page?.metaTitle || "About Us",
       description: page?.metaDesc || "Learn about Wedabime Pramukayo — Sri Lanka's trusted construction solutions provider.",

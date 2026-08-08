@@ -6,12 +6,12 @@
  * Body: { blogPostId: string, platforms?: string[] }
  *       - If platforms array is provided, post only to those platforms
  *       - If omitted, post to all active accounts
+ *
+ * Converted from Prisma to Neon direct SQL for Cloudflare Workers compatibility.
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { db } from "@/lib/db";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
+import { getSql, requireAuth, unauthorized, badRequest, notFound, serverError } from "@/lib/neon-sql";
 import { publishToAllPlatforms } from "@/lib/social-posting";
 
 const VALID_PLATFORMS = ["facebook", "threads", "instagram", "blogger", "medium", "reddit"];
@@ -19,55 +19,48 @@ const VALID_PLATFORMS = ["facebook", "threads", "instagram", "blogger", "medium"
 // POST /api/admin/social-post — Trigger social posting
 export async function POST(request: NextRequest) {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+    const session = await requireAuth();
+    if (!session) return unauthorized();
 
+    const sql = getSql();
     const body = await request.json();
     const { blogPostId, platforms } = body;
 
-    if (!blogPostId) {
-      return NextResponse.json(
-        { error: "blogPostId is required" },
-        { status: 400 }
-      );
-    }
+    if (!blogPostId) return badRequest("blogPostId is required");
 
     // Validate platforms if provided
     if (platforms && Array.isArray(platforms)) {
       const invalid = platforms.filter((p: string) => !VALID_PLATFORMS.includes(p));
       if (invalid.length > 0) {
-        return NextResponse.json(
-          { error: `Invalid platforms: ${invalid.join(", ")}. Valid: ${VALID_PLATFORMS.join(", ")}` },
-          { status: 400 }
-        );
+        return badRequest(`Invalid platforms: ${invalid.join(", ")}. Valid: ${VALID_PLATFORMS.join(", ")}`);
       }
     }
 
     // Fetch the blog post
-    const blogPost = await db.blogPost.findUnique({ where: { id: blogPostId } });
-    if (!blogPost) {
-      return NextResponse.json({ error: "Blog post not found" }, { status: 404 });
-    }
+    const rows = await sql`
+      SELECT id, slug, title, excerpt, content, "coverImageUrl", tags, "isPublished", "publishedAt", "createdAt", "updatedAt"
+      FROM "BlogPost"
+      WHERE id = ${blogPostId}
+    `;
+
+    if (rows.length === 0) return notFound("Blog post not found");
+
+    const blogPost = rows[0] as Record<string, unknown>;
 
     if (!blogPost.isPublished) {
-      return NextResponse.json(
-        { error: "Blog post must be published before sharing on social media" },
-        { status: 400 }
-      );
+      return badRequest("Blog post must be published before sharing on social media");
     }
 
     // Trigger posting
     const results = await publishToAllPlatforms(
       {
-        id: blogPost.id,
-        slug: blogPost.slug,
-        title: blogPost.title,
-        excerpt: blogPost.excerpt,
-        content: blogPost.content,
-        coverImageUrl: blogPost.coverImageUrl,
-        tags: blogPost.tags,
+        id: blogPost.id as string,
+        slug: blogPost.slug as string,
+        title: blogPost.title as string,
+        excerpt: blogPost.excerpt as string | null,
+        content: blogPost.content as string,
+        coverImageUrl: blogPost.coverImageUrl as string | null,
+        tags: blogPost.tags as string | null,
       },
       platforms
     );
@@ -82,9 +75,6 @@ export async function POST(request: NextRequest) {
     });
   } catch (error) {
     console.error("Social post trigger error:", error);
-    return NextResponse.json(
-      { error: "Failed to trigger social posting" },
-      { status: 500 }
-    );
+    return serverError("Failed to trigger social posting");
   }
 }

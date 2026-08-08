@@ -7,7 +7,7 @@
 // Force dynamic rendering — page queries database at request time
 export const dynamic = 'force-dynamic';
 
-import { db } from "@/lib/db";
+import { getSql } from "@/lib/neon-sql";
 import Image from "next/image";
 import Link from "next/link";
 import {
@@ -48,31 +48,69 @@ interface ContentSectionData {
 
 async function getHomeData() {
   try {
-    const [sections, featuredServices, categories] = await Promise.all([
-      db.contentSection.findMany({
-        where: { pageSlug: "home", isActive: true },
-        orderBy: { sortOrder: "asc" },
-      }),
-      db.product.findMany({
-        where: { isPublished: true, isFeatured: true },
-        orderBy: { sortOrder: "asc" },
-        take: 4,
-        include: { category: { select: { name: true, slug: true } } },
-      }),
-      db.productCategory.findMany({
-        where: { isActive: true },
-        orderBy: { sortOrder: "asc" },
-        include: { _count: { select: { products: true } } },
-      }),
+    const sql = getSql();
+
+    const [sectionsRows, featuredRows, categoryRows] = await Promise.all([
+      sql`
+        SELECT id, "sectionKey", type, title, subtitle, content, items, "imageUrl",
+               "linkUrl", "linkText", "sortOrder", "isActive", settings
+        FROM "ContentSection"
+        WHERE "pageSlug" = 'home' AND "isActive" = true
+        ORDER BY "sortOrder" ASC
+      `,
+      sql`
+        SELECT p.id, p.slug, p.name, p.subtitle, p.description, p.features,
+               p.advantages, p.specifications, p."mainImageUrl", p.gallery,
+               p."categoryId", p."metaTitle", p."metaDesc", p."metaKeywords",
+               p."ogImageUrl", p."isFeatured", p."isPublished", p."publishedAt",
+               p."sortOrder", p."createdAt", p."updatedAt",
+               c.name AS "category.name", c.slug AS "category.slug"
+        FROM "Product" p
+        LEFT JOIN "ProductCategory" c ON p."categoryId" = c.id
+        WHERE p."isPublished" = true AND p."isFeatured" = true
+        ORDER BY p."sortOrder" ASC
+        LIMIT 4
+      `,
+      sql`
+        SELECT pc.id, pc.slug, pc.name, pc.description, pc.icon, pc."imageUrl",
+               pc."sortOrder", pc."isActive", pc."createdAt", pc."updatedAt",
+               COALESCE(cnt.product_count, 0) AS "_count.products"
+        FROM "ProductCategory" pc
+        LEFT JOIN (
+          SELECT "categoryId", COUNT(*)::int AS product_count
+          FROM "Product"
+          GROUP BY "categoryId"
+        ) cnt ON pc.id = cnt."categoryId"
+        WHERE pc."isActive" = true
+        ORDER BY pc."sortOrder" ASC
+      `,
     ]);
 
     // Map sections by sectionKey for easy access
     const sectionsMap: Record<string, ContentSectionData> = {};
-    sections.forEach((s) => {
+    sectionsRows.forEach((s: any) => {
       sectionsMap[s.sectionKey] = {
         ...s,
         items: s.items as SectionItem[] | null,
         settings: s.settings as Record<string, any> | null,
+      };
+    });
+
+    // Reconstruct featured services with nested category
+    const featuredServices = featuredRows.map((row: any) => {
+      const { 'category.name': catName, 'category.slug': catSlug, ...rest } = row;
+      return {
+        ...rest,
+        category: catName ? { name: catName, slug: catSlug } : null,
+      };
+    });
+
+    // Reconstruct categories with _count
+    const categories = categoryRows.map((row: any) => {
+      const { '_count.products': productCount, ...rest } = row;
+      return {
+        ...rest,
+        _count: { products: productCount },
       };
     });
 

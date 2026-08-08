@@ -6,7 +6,7 @@
 // Force dynamic rendering — page queries database at request time
 export const dynamic = 'force-dynamic';
 
-import { db } from "@/lib/db";
+import { getSql } from "@/lib/neon-sql";
 import Link from "next/link";
 import { ArrowRight, CheckCircle, Star, Filter } from "lucide-react";
 import { Breadcrumbs } from "@/components/public/breadcrumbs";
@@ -15,27 +15,57 @@ export const revalidate = 60;
 
 async function getServicesData(categorySlug?: string) {
   try {
-    const [categories, services, sections] = await Promise.all([
-      db.productCategory.findMany({
-        where: { isActive: true },
-        orderBy: { sortOrder: "asc" },
-        include: { _count: { select: { products: true } } },
-      }),
-      db.product.findMany({
-        where: {
-          isPublished: true,
-          ...(categorySlug ? { category: { slug: categorySlug } } : {}),
-        },
-        orderBy: { sortOrder: "asc" },
-        include: { category: { select: { name: true, slug: true } } },
-      }),
-      db.contentSection.findMany({
-        where: { pageSlug: "services", isActive: true },
-        orderBy: { sortOrder: "asc" },
-      }),
+    const sql = getSql();
+
+    const [categoryRows, serviceRows, sectionsRows] = await Promise.all([
+      sql`
+        SELECT pc.id, pc.slug, pc.name, pc.description, pc.icon, pc."imageUrl",
+               pc."sortOrder", pc."isActive", pc."createdAt", pc."updatedAt",
+               COALESCE(cnt.product_count, 0) AS "_count.products"
+        FROM "ProductCategory" pc
+        LEFT JOIN (
+          SELECT "categoryId", COUNT(*)::int AS product_count
+          FROM "Product"
+          GROUP BY "categoryId"
+        ) cnt ON pc.id = cnt."categoryId"
+        WHERE pc."isActive" = true
+        ORDER BY pc."sortOrder" ASC
+      `,
+      sql`
+        SELECT p.id, p.slug, p.name, p.subtitle, p.description, p.features,
+               p.advantages, p.specifications, p."mainImageUrl", p.gallery,
+               p."categoryId", p."metaTitle", p."metaDesc", p."metaKeywords",
+               p."ogImageUrl", p."isFeatured", p."isPublished", p."publishedAt",
+               p."sortOrder", p."createdAt", p."updatedAt",
+               c.name AS "category.name", c.slug AS "category.slug"
+        FROM "Product" p
+        LEFT JOIN "ProductCategory" c ON p."categoryId" = c.id
+        WHERE p."isPublished" = true
+          ${categorySlug ? sql`AND c.slug = ${categorySlug}` : sql``}
+        ORDER BY p."sortOrder" ASC
+      `,
+      sql`
+        SELECT id, "sectionKey", type, title, subtitle, content, items, "imageUrl",
+               "linkUrl", "linkText", "sortOrder", "isActive", settings
+        FROM "ContentSection"
+        WHERE "pageSlug" = 'services' AND "isActive" = true
+        ORDER BY "sortOrder" ASC
+      `,
     ]);
 
-    const heroSection = sections.find((s) => s.sectionKey === "hero");
+    // Reconstruct categories with _count
+    const categories = categoryRows.map((row: any) => {
+      const { '_count.products': productCount, ...rest } = row;
+      return { ...rest, _count: { products: productCount } };
+    });
+
+    // Reconstruct services with nested category
+    const services = serviceRows.map((row: any) => {
+      const { 'category.name': catName, 'category.slug': catSlug, ...rest } = row;
+      return { ...rest, category: catName ? { name: catName, slug: catSlug } : null };
+    });
+
+    const heroSection = sectionsRows.find((s: any) => s.sectionKey === "hero");
     return { categories, services, heroSection };
   } catch (error) {
     console.error("Failed to fetch services data:", error);
@@ -45,7 +75,13 @@ async function getServicesData(categorySlug?: string) {
 
 export async function generateMetadata() {
   try {
-    const page = await db.page.findUnique({ where: { slug: "services" } });
+    const sql = getSql();
+    const rows = await sql`
+      SELECT "metaTitle", "metaDesc"
+      FROM "Page"
+      WHERE slug = 'services'
+    `;
+    const page = rows[0] || null;
     return {
       title: page?.metaTitle || "Our Services",
       description: page?.metaDesc || "Explore our range of premium i-Panel services for Sri Lanka.",

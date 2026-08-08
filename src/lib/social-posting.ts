@@ -15,7 +15,7 @@
  * All functions are Edge-compatible (fetch-based, no Node.js APIs).
  */
 
-import { db } from "@/lib/db";
+import { getSql, generateId } from "@/lib/neon-sql";
 
 // ─── Types ────────────────────────────────────────────────────
 
@@ -534,12 +534,13 @@ export async function publishToAllPlatforms(
   selectedPlatforms?: string[]
 ): Promise<Array<{ platform: string; accountName: string | null; result: PostResult }>> {
   // Get all active social accounts
-  const where: any = { isActive: true };
+  const sql = getSql();
+  let accounts: any[];
   if (selectedPlatforms && selectedPlatforms.length > 0) {
-    where.platform = { in: selectedPlatforms };
+    accounts = await sql`SELECT * FROM "SocialAccount" WHERE "isActive" = true AND platform = ANY(${selectedPlatforms})`;
+  } else {
+    accounts = await sql`SELECT * FROM "SocialAccount" WHERE "isActive" = true`;
   }
-
-  const accounts = await db.socialAccount.findMany({ where });
 
   if (accounts.length === 0) {
     return [];
@@ -562,25 +563,14 @@ export async function publishToAllPlatforms(
       const result = await poster(account as SocialAccountData, blogPost);
 
       // Save result to SocialPost record
-      await db.socialPost.create({
-        data: {
-          blogPostId: blogPost.id,
-          platform: account.platform,
-          platformPostId: result.platformPostId,
-          status: result.success ? "published" : "failed",
-          content: result.content,
-          error: result.error,
-          publishedAt: result.success ? new Date() : null,
-          socialAccountId: account.id,
-        },
-      });
+      await sql`
+        INSERT INTO "SocialPost" (id, "blogPostId", platform, "platformPostId", status, content, error, "publishedAt", "socialAccountId", "createdAt")
+        VALUES (${generateId()}, ${blogPost.id}, ${account.platform}, ${result.platformPostId || null}, ${result.success ? 'published' : 'failed'}, ${result.content || null}, ${result.error || null}, ${result.success ? new Date().toISOString() : null}, ${account.id}, NOW())
+      `;
 
       // Update lastUsedAt on the account
       if (result.success) {
-        await db.socialAccount.update({
-          where: { id: account.id },
-          data: { lastUsedAt: new Date() },
-        });
+        await sql`UPDATE "SocialAccount" SET "lastUsedAt" = NOW() WHERE id = ${account.id}`;
       }
 
       results.push({
@@ -597,15 +587,10 @@ export async function publishToAllPlatforms(
       });
 
       // Save failure record
-      await db.socialPost.create({
-        data: {
-          blogPostId: blogPost.id,
-          platform: account.platform,
-          status: "failed",
-          error: errorMsg,
-          socialAccountId: account.id,
-        },
-      });
+      await sql`
+        INSERT INTO "SocialPost" (id, "blogPostId", platform, status, error, "socialAccountId", "createdAt")
+        VALUES (${generateId()}, ${blogPost.id}, ${account.platform}, 'failed', ${errorMsg}, ${account.id}, NOW())
+      `;
     }
   }
 
@@ -619,7 +604,9 @@ export async function publishToPlatform(
   accountId: string,
   blogPost: BlogPostData
 ): Promise<PostResult> {
-  const account = await db.socialAccount.findUnique({ where: { id: accountId } });
+  const sql = getSql();
+  const accountRows = await sql`SELECT * FROM "SocialAccount" WHERE id = ${accountId}`;
+  const account = accountRows[0];
   if (!account) {
     return { success: false, error: "Social account not found" };
   }
@@ -636,24 +623,13 @@ export async function publishToPlatform(
   const result = await poster(account as SocialAccountData, blogPost);
 
   // Save result
-  await db.socialPost.create({
-    data: {
-      blogPostId: blogPost.id,
-      platform: account.platform,
-      platformPostId: result.platformPostId,
-      status: result.success ? "published" : "failed",
-      content: result.content,
-      error: result.error,
-      publishedAt: result.success ? new Date() : null,
-      socialAccountId: account.id,
-    },
-  });
+  await sql`
+    INSERT INTO "SocialPost" (id, "blogPostId", platform, "platformPostId", status, content, error, "publishedAt", "socialAccountId", "createdAt")
+    VALUES (${generateId()}, ${blogPost.id}, ${account.platform}, ${result.platformPostId || null}, ${result.success ? 'published' : 'failed'}, ${result.content || null}, ${result.error || null}, ${result.success ? new Date().toISOString() : null}, ${account.id}, NOW())
+  `;
 
   if (result.success) {
-    await db.socialAccount.update({
-      where: { id: account.id },
-      data: { lastUsedAt: new Date() },
-    });
+    await sql`UPDATE "SocialAccount" SET "lastUsedAt" = NOW() WHERE id = ${account.id}`;
   }
 
   return result;

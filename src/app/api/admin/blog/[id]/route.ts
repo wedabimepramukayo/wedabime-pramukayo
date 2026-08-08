@@ -1,12 +1,19 @@
 /**
  * API: Single Blog Post — GET, PUT, DELETE by ID
  * Wedabime Pramukayo CMS
+ * Uses @neondatabase/serverless directly (Cloudflare Workers compatible)
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { db } from "@/lib/db";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
+import {
+  getSql,
+  requireAuth,
+  unauthorized,
+  notFound,
+  conflict,
+  serverError,
+  jsonStringify,
+} from "@/lib/neon-sql";
 
 // GET /api/admin/blog/[id]
 export async function GET(
@@ -14,22 +21,30 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+    const session = await requireAuth();
+    if (!session) return unauthorized();
 
     const { id } = await params;
-    const post = await db.blogPost.findUnique({ where: { id } });
+    const sql = getSql();
+
+    const [post] = await sql`
+      SELECT
+        id, slug, title, excerpt, content,
+        "coverImageUrl", author, tags,
+        "metaTitle", "metaDesc", "metaKeywords", "ogImageUrl",
+        "isPublished", "publishedAt", "createdAt", "updatedAt"
+      FROM "BlogPost"
+      WHERE id = ${id}
+    `;
 
     if (!post) {
-      return NextResponse.json({ error: "Blog post not found" }, { status: 404 });
+      return notFound("Blog post not found");
     }
 
     return NextResponse.json({ post });
   } catch (error) {
     console.error("Blog post GET error:", error);
-    return NextResponse.json({ error: "Failed to fetch blog post" }, { status: 500 });
+    return serverError("Failed to fetch blog post");
   }
 }
 
@@ -39,57 +54,89 @@ export async function PUT(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+    const session = await requireAuth();
+    if (!session) return unauthorized();
 
     const { id } = await params;
     const body = await request.json();
+    const sql = getSql();
 
-    const existing = await db.blogPost.findUnique({ where: { id } });
+    // Fetch existing post
+    const [existing] = await sql`
+      SELECT
+        id, slug, title, excerpt, content,
+        "coverImageUrl", author, tags,
+        "metaTitle", "metaDesc", "metaKeywords", "ogImageUrl",
+        "isPublished", "publishedAt", "createdAt", "updatedAt"
+      FROM "BlogPost"
+      WHERE id = ${id}
+    `;
     if (!existing) {
-      return NextResponse.json({ error: "Blog post not found" }, { status: 404 });
+      return notFound("Blog post not found");
     }
 
+    // Check slug conflict if changing slug
     if (body.slug && body.slug !== existing.slug) {
-      const slugConflict = await db.blogPost.findUnique({ where: { slug: body.slug } });
+      const [slugConflict] = await sql`
+        SELECT id FROM "BlogPost" WHERE slug = ${body.slug}
+      `;
       if (slugConflict) {
-        return NextResponse.json({ error: "A blog post with this slug already exists" }, { status: 409 });
+        return conflict("A blog post with this slug already exists");
       }
     }
 
+    // Determine if we should set publishedAt (first publish)
     const wasUnpublished = !existing.isPublished;
     const nowPublishing = body.isPublished === true;
     const shouldSetPublishedAt = wasUnpublished && nowPublishing;
 
-    const tags = body.tags !== undefined
-      ? (typeof body.tags === "object" ? JSON.stringify(body.tags) : body.tags || null)
-      : undefined;
+    // Build SET clauses dynamically
+    const setClauses: string[] = [];
+    const values: unknown[] = [];
+    let paramIndex = 1;
 
-    const post = await db.blogPost.update({
-      where: { id },
-      data: {
-        ...(body.slug !== undefined && { slug: body.slug }),
-        ...(body.title !== undefined && { title: body.title }),
-        ...(body.excerpt !== undefined && { excerpt: body.excerpt || null }),
-        ...(body.content !== undefined && { content: body.content }),
-        ...(body.coverImageUrl !== undefined && { coverImageUrl: body.coverImageUrl || null }),
-        ...(body.author !== undefined && { author: body.author || null }),
-        ...(tags !== undefined && { tags }),
-        ...(body.metaTitle !== undefined && { metaTitle: body.metaTitle || null }),
-        ...(body.metaDesc !== undefined && { metaDesc: body.metaDesc || null }),
-        ...(body.metaKeywords !== undefined && { metaKeywords: body.metaKeywords || null }),
-        ...(body.ogImageUrl !== undefined && { ogImageUrl: body.ogImageUrl || null }),
-        ...(body.isPublished !== undefined && { isPublished: body.isPublished }),
-        ...(shouldSetPublishedAt && { publishedAt: new Date() }),
-      },
-    });
+    const addField = (column: string, value: unknown) => {
+      setClauses.push(`${column} = $${paramIndex}`);
+      values.push(value);
+      paramIndex++;
+    };
+
+    if (body.slug !== undefined) addField("slug", body.slug);
+    if (body.title !== undefined) addField("title", body.title);
+    if (body.excerpt !== undefined) addField("excerpt", body.excerpt || null);
+    if (body.content !== undefined) addField("content", body.content);
+    if (body.coverImageUrl !== undefined) addField('"coverImageUrl"', body.coverImageUrl || null);
+    if (body.author !== undefined) addField("author", body.author || null);
+    if (body.tags !== undefined) {
+      addField("tags", jsonStringify(body.tags));
+    }
+    if (body.metaTitle !== undefined) addField('"metaTitle"', body.metaTitle || null);
+    if (body.metaDesc !== undefined) addField('"metaDesc"', body.metaDesc || null);
+    if (body.metaKeywords !== undefined) addField('"metaKeywords"', body.metaKeywords || null);
+    if (body.ogImageUrl !== undefined) addField('"ogImageUrl"', body.ogImageUrl || null);
+    if (body.isPublished !== undefined) addField('"isPublished"', body.isPublished);
+    if (shouldSetPublishedAt) addField('"publishedAt"', new Date().toISOString());
+
+    // Always update updatedAt
+    setClauses.push(`"updatedAt" = NOW()`);
+
+    // If no fields to update besides updatedAt, just return existing
+    if (setClauses.length === 1) {
+      return NextResponse.json({ post: existing });
+    }
+
+    const setClause = setClauses.join(", ");
+    values.push(id); // last param for WHERE
+
+    const [post] = await sql.unsafe(
+      `UPDATE "BlogPost" SET ${setClause} WHERE id = $${paramIndex} RETURNING id, slug, title, excerpt, content, "coverImageUrl", author, tags, "metaTitle", "metaDesc", "metaKeywords", "ogImageUrl", "isPublished", "publishedAt", "createdAt", "updatedAt"`,
+      values
+    );
 
     return NextResponse.json({ post });
   } catch (error) {
     console.error("Blog post PUT error:", error);
-    return NextResponse.json({ error: "Failed to update blog post" }, { status: 500 });
+    return serverError("Failed to update blog post");
   }
 }
 
@@ -99,21 +146,26 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+    const session = await requireAuth();
+    if (!session) return unauthorized();
 
     const { id } = await params;
-    const existing = await db.blogPost.findUnique({ where: { id } });
+    const sql = getSql();
+
+    const [existing] = await sql`
+      SELECT id FROM "BlogPost" WHERE id = ${id}
+    `;
     if (!existing) {
-      return NextResponse.json({ error: "Blog post not found" }, { status: 404 });
+      return notFound("Blog post not found");
     }
 
-    await db.blogPost.delete({ where: { id } });
+    await sql`
+      DELETE FROM "BlogPost" WHERE id = ${id}
+    `;
+
     return NextResponse.json({ message: "Blog post deleted successfully" });
   } catch (error) {
     console.error("Blog post DELETE error:", error);
-    return NextResponse.json({ error: "Failed to delete blog post" }, { status: 500 });
+    return serverError("Failed to delete blog post");
   }
 }

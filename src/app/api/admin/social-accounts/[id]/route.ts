@@ -4,12 +4,12 @@
  *
  * DELETE: Remove a social account and its posts
  * PATCH: Update account (toggle active, update tokens, etc.)
+ *
+ * Converted from Prisma to Neon direct SQL for Cloudflare Workers compatibility.
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { db } from "@/lib/db";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
+import { getSql, requireAuth, unauthorized, notFound, serverError } from "@/lib/neon-sql";
 
 /** Mask a token for display */
 function maskToken(token: string | null): string | null {
@@ -24,26 +24,27 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+    const session = await requireAuth();
+    if (!session) return unauthorized();
 
+    const sql = getSql();
     const { id } = await params;
-    const account = await db.socialAccount.findUnique({ where: { id } });
 
-    if (!account) {
-      return NextResponse.json({ error: "Social account not found" }, { status: 404 });
-    }
+    // Check account exists
+    const existing = await sql`
+      SELECT id FROM "SocialAccount" WHERE id = ${id}
+    `;
+
+    if (existing.length === 0) return notFound("Social account not found");
 
     // Delete all associated posts first, then the account
-    await db.socialPost.deleteMany({ where: { socialAccountId: id } });
-    await db.socialAccount.delete({ where: { id } });
+    await sql`DELETE FROM "SocialPost" WHERE "socialAccountId" = ${id}`;
+    await sql`DELETE FROM "SocialAccount" WHERE id = ${id}`;
 
     return NextResponse.json({ message: "Social account removed successfully" });
   } catch (error) {
     console.error("Social account DELETE error:", error);
-    return NextResponse.json({ error: "Failed to delete social account" }, { status: 500 });
+    return serverError("Failed to delete social account");
   }
 }
 
@@ -53,41 +54,55 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+    const session = await requireAuth();
+    if (!session) return unauthorized();
 
+    const sql = getSql();
     const { id } = await params;
     const body = await request.json();
 
-    const account = await db.socialAccount.findUnique({ where: { id } });
-    if (!account) {
-      return NextResponse.json({ error: "Social account not found" }, { status: 404 });
-    }
+    // Fetch existing account (needed for merge + existence check)
+    const existingRows = await sql`
+      SELECT id, platform, "accessToken", "refreshToken", "accountId", "accountName", "isActive", "lastUsedAt", "createdAt", "updatedAt"
+      FROM "SocialAccount"
+      WHERE id = ${id}
+    `;
 
-    // Build update data (only allow specific fields)
-    const data: any = {};
-    if (body.isActive !== undefined) data.isActive = body.isActive;
-    if (body.accessToken !== undefined) data.accessToken = body.accessToken;
-    if (body.refreshToken !== undefined) data.refreshToken = body.refreshToken;
-    if (body.accountId !== undefined) data.accountId = body.accountId;
-    if (body.accountName !== undefined) data.accountName = body.accountName;
+    if (existingRows.length === 0) return notFound("Social account not found");
 
-    const updated = await db.socialAccount.update({
-      where: { id },
-      data,
-    });
+    const current = existingRows[0] as Record<string, unknown>;
+
+    // Merge: use provided values or keep current values
+    const newIsActive = body.isActive !== undefined ? body.isActive : current.isActive;
+    const newAccessToken = body.accessToken !== undefined ? body.accessToken : current.accessToken;
+    const newRefreshToken = body.refreshToken !== undefined ? body.refreshToken : current.refreshToken;
+    const newAccountId = body.accountId !== undefined ? body.accountId : current.accountId;
+    const newAccountName = body.accountName !== undefined ? body.accountName : current.accountName;
+
+    const rows = await sql`
+      UPDATE "SocialAccount"
+      SET
+        "isActive" = ${newIsActive},
+        "accessToken" = ${newAccessToken},
+        "refreshToken" = ${newRefreshToken},
+        "accountId" = ${newAccountId},
+        "accountName" = ${newAccountName},
+        "updatedAt" = NOW()
+      WHERE id = ${id}
+      RETURNING id, platform, "accessToken", "refreshToken", "accountId", "accountName", "isActive", "lastUsedAt", "createdAt", "updatedAt"
+    `;
+
+    const updated = rows[0] as Record<string, unknown>;
 
     return NextResponse.json({
       account: {
         ...updated,
-        accessToken: maskToken(updated.accessToken),
-        refreshToken: maskToken(updated.refreshToken),
+        accessToken: maskToken(updated.accessToken as string | null),
+        refreshToken: maskToken(updated.refreshToken as string | null),
       },
     });
   } catch (error) {
     console.error("Social account PATCH error:", error);
-    return NextResponse.json({ error: "Failed to update social account" }, { status: 500 });
+    return serverError("Failed to update social account");
   }
 }

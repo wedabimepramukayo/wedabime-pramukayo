@@ -2,14 +2,14 @@
  * API: Social Accounts — List and create social media accounts
  * Wedabime Pramukayo CMS
  *
- * GET: List all accounts (tokens masked for security)
+ * GET: List all accounts (tokens masked for security) with post count
  * POST: Add/connect a social media account
+ *
+ * Converted from Prisma to Neon direct SQL for Cloudflare Workers compatibility.
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { db } from "@/lib/db";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
+import { getSql, generateId, requireAuth, unauthorized, badRequest, serverError } from "@/lib/neon-sql";
 
 const VALID_PLATFORMS = ["facebook", "threads", "instagram", "blogger", "medium", "reddit"];
 
@@ -23,77 +23,84 @@ function maskToken(token: string | null): string | null {
 // GET /api/admin/social-accounts — List all accounts (tokens masked)
 export async function GET() {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+    const session = await requireAuth();
+    if (!session) return unauthorized();
 
-    const accounts = await db.socialAccount.findMany({
-      orderBy: [{ platform: "asc" }, { createdAt: "desc" }],
-      include: {
-        _count: {
-          select: { posts: true },
-        },
-      },
-    });
+    const sql = getSql();
+
+    // LEFT JOIN with SocialPost for post count per account
+    const rows = await sql`
+      SELECT
+        sa.id,
+        sa.platform,
+        sa."accessToken",
+        sa."refreshToken",
+        sa."accountId",
+        sa."accountName",
+        sa."isActive",
+        sa."lastUsedAt",
+        sa."createdAt",
+        sa."updatedAt",
+        COUNT(sp.id)::int AS "postCount"
+      FROM "SocialAccount" sa
+      LEFT JOIN "SocialPost" sp ON sp."socialAccountId" = sa.id
+      GROUP BY sa.id, sa.platform, sa."accessToken", sa."refreshToken", sa."accountId", sa."accountName", sa."isActive", sa."lastUsedAt", sa."createdAt", sa."updatedAt"
+      ORDER BY sa.platform ASC, sa."createdAt" DESC
+    `;
 
     // Mask tokens for security
-    const masked = accounts.map((account) => ({
+    const accounts = (rows as Record<string, unknown>[]).map((account) => ({
       ...account,
-      accessToken: maskToken(account.accessToken),
-      refreshToken: maskToken(account.refreshToken),
-      postCount: account._count.posts,
+      accessToken: maskToken(account.accessToken as string | null),
+      refreshToken: maskToken(account.refreshToken as string | null),
+      postCount: account.postCount,
     }));
 
-    return NextResponse.json({ accounts: masked });
+    return NextResponse.json({ accounts });
   } catch (error) {
     console.error("Social accounts GET error:", error);
-    return NextResponse.json({ error: "Failed to fetch social accounts" }, { status: 500 });
+    return serverError("Failed to fetch social accounts");
   }
 }
 
 // POST /api/admin/social-accounts — Add/connect a social account
 export async function POST(request: NextRequest) {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+    const session = await requireAuth();
+    if (!session) return unauthorized();
 
+    const sql = getSql();
     const body = await request.json();
     const { platform, accessToken, refreshToken, accountId, accountName, isActive } = body;
 
     if (!platform || !VALID_PLATFORMS.includes(platform)) {
-      return NextResponse.json(
-        { error: `Invalid platform. Must be one of: ${VALID_PLATFORMS.join(", ")}` },
-        { status: 400 }
-      );
+      return badRequest(`Invalid platform. Must be one of: ${VALID_PLATFORMS.join(", ")}`);
     }
 
-    const account = await db.socialAccount.create({
-      data: {
-        platform,
-        accessToken: accessToken || null,
-        refreshToken: refreshToken || null,
-        accountId: accountId || null,
-        accountName: accountName || null,
-        isActive: isActive ?? true,
-      },
-    });
+    const id = generateId();
+    const active = isActive ?? true;
+
+    const rows = await sql`
+      INSERT INTO "SocialAccount" (id, platform, "accessToken", "refreshToken", "accountId", "accountName", "isActive", "lastUsedAt", "createdAt", "updatedAt")
+      VALUES (${id}, ${platform}, ${accessToken || null}, ${refreshToken || null}, ${accountId || null}, ${accountName || null}, ${active}, NULL, NOW(), NOW())
+      RETURNING id, platform, "accessToken", "refreshToken", "accountId", "accountName", "isActive", "lastUsedAt", "createdAt", "updatedAt"
+    `;
+
+    const account = rows[0] as Record<string, unknown>;
 
     // Return with masked tokens
     return NextResponse.json(
       {
         account: {
           ...account,
-          accessToken: maskToken(account.accessToken),
-          refreshToken: maskToken(account.refreshToken),
+          accessToken: maskToken(account.accessToken as string | null),
+          refreshToken: maskToken(account.refreshToken as string | null),
         },
       },
       { status: 201 }
     );
   } catch (error) {
     console.error("Social accounts POST error:", error);
-    return NextResponse.json({ error: "Failed to create social account" }, { status: 500 });
+    return serverError("Failed to create social account");
   }
 }
