@@ -2,16 +2,16 @@
 
 /**
  * Admin Login Page — Wedabime Pramukayo CMS
- * Elegant green-themed login with brand identity
+ * Uses NextAuth signIn with redirect:false, then navigates manually.
  *
- * Uses a custom login API endpoint instead of NextAuth's signIn()
- * to bypass the Cloudflare Workers redirect issue where NextAuth
- * generates callback URLs with the workers.dev internal domain.
- *
- * Flow: POST /api/admin/login → sets session cookie → navigate to dashboard
+ * On Cloudflare Workers, NextAuth generates redirect URLs with the
+ * workers.dev internal domain. By using redirect:false, we prevent
+ * the browser from following that redirect, and instead navigate
+ * to the dashboard manually after the session cookie is set.
  */
 
 import { useState, useEffect } from "react";
+import { signIn } from "next-auth/react";
 import Image from "next/image";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -28,7 +28,6 @@ export default function AdminLoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [justRegistered, setJustRegistered] = useState(false);
 
-  // Check if just registered
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     if (params.get("registered") === "true") {
@@ -42,24 +41,26 @@ export default function AdminLoginPage() {
     setIsLoading(true);
 
     try {
-      // Use custom login endpoint that bypasses NextAuth's redirect mechanism
-      const response = await fetch("/api/admin/login", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password }),
+      const result = await signIn("credentials", {
+        email,
+        password,
+        redirect: false,
       });
 
-      const data = await response.json();
-
-      if (!response.ok) {
-        setError(data.error || "Invalid email or password. Please try again.");
-        return;
-      }
-
-      if (data.success) {
-        // Session cookie is set by the server - navigate to dashboard
-        // Use full page navigation to ensure cookie is available
-        window.location.href = "/admin/dashboard";
+      if (result?.error) {
+        try {
+          const errorObj = JSON.parse(result.error);
+          setError(errorObj.message || "Invalid credentials");
+        } catch {
+          setError("Invalid email or password. Please try again.");
+        }
+      } else if (result?.ok) {
+        // Session cookie is now set on the correct domain.
+        // Navigate to dashboard using full page reload.
+        // Small delay to ensure cookie is fully persisted.
+        setTimeout(() => {
+          window.location.href = "/admin/dashboard";
+        }, 500);
       }
     } catch {
       setError("An unexpected error occurred. Please try again.");
@@ -75,7 +76,6 @@ export default function AdminLoginPage() {
         background: "linear-gradient(135deg, #081C15 0%, #1B4332 30%, #2D6A4F 60%, #40916C 100%)",
       }}
     >
-      {/* Decorative background elements */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
         <div className="absolute -top-40 -right-40 w-80 h-80 bg-brand-spring/5 rounded-full blur-3xl" />
         <div className="absolute -bottom-40 -left-40 w-96 h-96 bg-brand-emerald/10 rounded-full blur-3xl" />
@@ -83,7 +83,6 @@ export default function AdminLoginPage() {
       </div>
 
       <div className="relative w-full max-w-md">
-        {/* Brand Header */}
         <div className="text-center mb-8 space-y-4">
           <div className="flex justify-center">
             <div className="relative h-20 w-20 rounded-2xl overflow-hidden shadow-2xl ring-2 ring-brand-spring/30 bg-brand-dark/50 backdrop-blur">
@@ -106,7 +105,6 @@ export default function AdminLoginPage() {
           </div>
         </div>
 
-        {/* Login Card */}
         <Card className="border-brand-emerald/20 bg-brand-dark/60 backdrop-blur-xl shadow-2xl">
           <CardHeader className="space-y-2 text-center pb-4">
             <div className="mx-auto w-12 h-12 rounded-full bg-brand-emerald/20 flex items-center justify-center">
@@ -119,7 +117,6 @@ export default function AdminLoginPage() {
 
           <CardContent>
             <form onSubmit={handleSubmit} className="space-y-5">
-              {/* Registration Success */}
               {justRegistered && (
                 <Alert className="bg-green-500/10 border-green-500/20 text-green-300">
                   <CheckCircle2 className="h-4 w-4" />
@@ -129,19 +126,14 @@ export default function AdminLoginPage() {
                 </Alert>
               )}
 
-              {/* Error Alert */}
               {error && (
                 <Alert variant="destructive" className="bg-red-500/10 border-red-500/20 text-red-300">
                   <AlertDescription>{error}</AlertDescription>
                 </Alert>
               )}
 
-              {/* Email Field */}
               <div className="space-y-2">
-                <Label
-                  htmlFor="email"
-                  className="text-brand-sage/90 text-sm font-medium"
-                >
+                <Label htmlFor="email" className="text-brand-sage/90 text-sm font-medium">
                   Email Address
                 </Label>
                 <Input
@@ -156,12 +148,8 @@ export default function AdminLoginPage() {
                 />
               </div>
 
-              {/* Password Field */}
               <div className="space-y-2">
-                <Label
-                  htmlFor="password"
-                  className="text-brand-sage/90 text-sm font-medium"
-                >
+                <Label htmlFor="password" className="text-brand-sage/90 text-sm font-medium">
                   Password
                 </Label>
                 <div className="relative">
@@ -180,16 +168,11 @@ export default function AdminLoginPage() {
                     onClick={() => setShowPassword(!showPassword)}
                     className="absolute right-3 top-1/2 -translate-y-1/2 text-brand-sage/40 hover:text-brand-sage transition-colors"
                   >
-                    {showPassword ? (
-                      <EyeOff className="h-4 w-4" />
-                    ) : (
-                      <Eye className="h-4 w-4" />
-                    )}
+                    {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                   </button>
                 </div>
               </div>
 
-              {/* Submit Button */}
               <Button
                 type="submit"
                 disabled={isLoading}
@@ -209,7 +192,6 @@ export default function AdminLoginPage() {
               </Button>
             </form>
 
-            {/* Eco Badge */}
             <div className="mt-6 pt-4 border-t border-brand-emerald/15">
               <div className="flex items-center justify-center gap-4 text-center">
                 <div className="flex items-center gap-1.5 text-brand-sage/50">
@@ -222,7 +204,6 @@ export default function AdminLoginPage() {
                   <span className="text-[10px]">Eco-friendly solutions</span>
                 </div>
               </div>
-              {/* Register link — for first-time setup */}
               <div className="mt-3 text-center">
                 <a
                   href="/admin/register"
@@ -235,7 +216,6 @@ export default function AdminLoginPage() {
           </CardContent>
         </Card>
 
-        {/* Footer */}
         <p className="text-center text-brand-sage/30 text-xs mt-6">
           Wedabime Pramukayo CMS — Secure Admin Access
         </p>
