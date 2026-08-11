@@ -21,10 +21,15 @@ export async function POST(request: NextRequest) {
     ? "__Secure-next-auth.callback-url"
     : "next-auth.callback-url";
 
+  const authFlagCookieName = isHttps
+    ? "__Secure-wpm_auth"
+    : "wpm_auth";
+
   // Set cookies to expire immediately (clear them)
   const clearCookies = [
     `${sessionCookieName}=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT; HttpOnly; SameSite=Lax${isHttps ? "; Secure" : ""}`,
     `${callbackCookieName}=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT; HttpOnly; SameSite=Lax${isHttps ? "; Secure" : ""}`,
+    `${authFlagCookieName}=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax${isHttps ? "; Secure" : ""}`,
   ];
 
   const response = NextResponse.json({ success: true }, { status: 200 });

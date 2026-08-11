@@ -159,7 +159,15 @@ export async function POST(request: NextRequest) {
 
     const setCookieHeader = cookieParts.join("; ");
 
-    // Return success response with Set-Cookie header
+    // Also set a SIMPLE non-HttpOnly cookie that the middleware CAN read.
+    // The NextAuth session cookie is HttpOnly and the middleware can't
+    // reliably detect it on Cloudflare Workers. This simple cookie is
+    // just a flag — real auth is verified server-side via getServerSession().
+    const authFlagCookie = isHttps
+      ? `__Secure-wpm_auth=1; Path=/; Expires=${expires.toUTCString()}; SameSite=Lax; Secure`
+      : `wpm_auth=1; Path=/; Expires=${expires.toUTCString()}; SameSite=Lax`;
+
+    // Return success response with Set-Cookie headers
     const response = NextResponse.json(
       {
         success: true,
@@ -173,8 +181,8 @@ export async function POST(request: NextRequest) {
       { status: 200 }
     );
 
-    // Set the session cookie
-    response.headers.set("Set-Cookie", setCookieHeader);
+    // Set both cookies (session token + auth> auth flag)
+    response.headers.set("Set-Cookie", `${setCookieHeader}, ${authFlagCookie}`);
 
     return response;
   } catch (error: any) {
