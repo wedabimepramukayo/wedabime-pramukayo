@@ -19,7 +19,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
-import { signOut } from "next-auth/react";
+// Custom logout — bypasses NextAuth's signOut() which has workers.dev domain issues
 
 interface AdminHeaderProps {
   user: any;
@@ -111,7 +111,12 @@ export function AdminHeader({ user }: AdminHeaderProps) {
               <DropdownMenuSeparator />
               <DropdownMenuItem
                 className="cursor-pointer text-red-600 focus:text-red-600 focus:bg-red-50"
-                onClick={() => signOut({ callbackUrl: "/admin/login" })}
+                onClick={async () => {
+                  try {
+                    await fetch("/api/admin/logout", { method: "POST" });
+                  } catch {}
+                  window.location.href = "/admin/login";
+                }}
               >
                 Sign Out
               </DropdownMenuItem>

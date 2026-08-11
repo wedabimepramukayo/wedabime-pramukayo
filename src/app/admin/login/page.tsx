@@ -2,16 +2,18 @@
 
 /**
  * Admin Login Page — Wedabime Pramukayo CMS
- * Uses NextAuth signIn with redirect:false, then navigates manually.
  *
- * On Cloudflare Workers, NextAuth generates redirect URLs with the
- * workers.dev internal domain. By using redirect:false, we prevent
- * the browser from following that redirect, and instead navigate
- * to the dashboard manually after the session cookie is set.
+ * Uses a custom /api/admin/login endpoint instead of NextAuth's signIn()
+ * to bypass the Cloudflare Workers domain mismatch issue where NextAuth
+ * generates redirect URLs with the workers.dev internal domain.
+ *
+ * Flow:
+ * 1. POST credentials to /api/admin/login
+ * 2. Server validates, creates JWT, sets session cookie
+ * 3. Client navigates to /admin/dashboard on success
  */
 
 import { useState, useEffect } from "react";
-import { signIn } from "next-auth/react";
 import Image from "next/image";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -41,27 +43,25 @@ export default function AdminLoginPage() {
     setIsLoading(true);
 
     try {
-      const result = await signIn("credentials", {
-        email,
-        password,
-        redirect: false,
+      const response = await fetch("/api/admin/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password }),
       });
 
-      if (result?.error) {
-        try {
-          const errorObj = JSON.parse(result.error);
-          setError(errorObj.message || "Invalid credentials");
-        } catch {
-          setError("Invalid email or password. Please try again.");
-        }
-      } else if (result?.ok) {
-        // Session cookie is now set on the correct domain.
-        // Navigate to dashboard using full page reload.
-        // Small delay to ensure cookie is fully persisted.
-        setTimeout(() => {
-          window.location.href = "/admin/dashboard";
-        }, 500);
+      const data = await response.json();
+
+      if (!response.ok || !data.success) {
+        setError(data.error || "Invalid email or password. Please try again.");
+        return;
       }
+
+      // Login successful — session cookie is now set
+      // Navigate to dashboard with a full page reload
+      // Small delay to ensure cookie is fully persisted by the browser
+      setTimeout(() => {
+        window.location.href = "/admin/dashboard";
+      }, 300);
     } catch {
       setError("An unexpected error occurred. Please try again.");
     } finally {

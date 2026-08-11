@@ -25,7 +25,7 @@ import {
   Users,
 } from "lucide-react";
 import { useState } from "react";
-import { signOut } from "next-auth/react";
+// Custom logout — bypasses NextAuth's signOut() which has workers.dev domain issues
 import { cn } from "@/lib/utils";
 
 const menuItems = [
@@ -201,7 +201,10 @@ export function AdminSidebar() {
 
         {/* Logout */}
         <button
-          onClick={() => signOut({ callbackUrl: "/admin/login" })}
+          onClick={async () => {
+            try { await fetch("/api/admin/logout", { method: "POST" }); } catch {}
+            window.location.href = "/admin/login";
+          }}
           className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm text-red-400/70 hover:bg-red-500/10 hover:text-red-400 transition-colors w-full"
         >
           <LogOut className="h-4 w-4" />
