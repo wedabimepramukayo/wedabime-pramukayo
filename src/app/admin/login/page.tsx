@@ -8,9 +8,10 @@
  * generates redirect URLs with the workers.dev internal domain.
  *
  * Flow:
- * 1. POST credentials to /api/admin/login
- * 2. Server validates, creates JWT, sets session cookie
- * 3. Client navigates to /admin/dashboard on success
+ * 1. Check if already authenticated → redirect to dashboard/callbackUrl
+ * 2. POST credentials to /api/admin/login
+ * 3. Server validates, creates JWT, sets session cookie
+ * 4. Client navigates to dashboard on success
  */
 
 import { useState, useEffect } from "react";
@@ -29,12 +30,31 @@ export default function AdminLoginPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [justRegistered, setJustRegistered] = useState(false);
+  const [checkingSession, setCheckingSession] = useState(true);
 
+  // On mount, check if user is already authenticated
+  // If so, redirect to the callback URL or dashboard
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     if (params.get("registered") === "true") {
       setJustRegistered(true);
     }
+
+    // Check if already authenticated by calling the session endpoint
+    fetch("/api/auth/session")
+      .then((res) => res.json())
+      .then((data) => {
+        if (data?.user?.email) {
+          // Already logged in — redirect to callback URL or dashboard
+          const callbackUrl = params.get("callbackUrl") || "/admin/dashboard";
+          window.location.replace(callbackUrl);
+        } else {
+          setCheckingSession(false);
+        }
+      })
+      .catch(() => {
+        setCheckingSession(false);
+      });
   }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -57,17 +77,57 @@ export default function AdminLoginPage() {
       }
 
       // Login successful — session cookie is now set
-      // Navigate to dashboard with a full page reload
-      // Small delay to ensure cookie is fully persisted by the browser
+      // Get callback URL from current URL params, or default to dashboard
+      const params = new URLSearchParams(window.location.search);
+      const callbackUrl = params.get("callbackUrl") || "/admin/dashboard";
+
+      // Navigate with a full page reload to ensure session is picked up
       setTimeout(() => {
-        window.location.href = "/admin/dashboard";
+        window.location.replace(callbackUrl);
       }, 300);
-    } catch {
-      setError("An unexpected error occurred. Please try again.");
+    } catch (err) {
+      // If the custom login endpoint fails (e.g., route not deployed yet),
+      // fall back to NextAuth signIn as a last resort
+      console.error("Custom login failed, trying NextAuth fallback:", err);
+
+      try {
+        const { signIn } = await import("next-auth/react");
+        const result = await signIn("credentials", {
+          email,
+          password,
+          redirect: false,
+        });
+
+        if (result?.ok) {
+          const params = new URLSearchParams(window.location.search);
+          const callbackUrl = params.get("callbackUrl") || "/admin/dashboard";
+          setTimeout(() => {
+            window.location.replace(callbackUrl);
+          }, 500);
+        } else {
+          setError("Invalid email or password. Please try again.");
+        }
+      } catch (fallbackErr) {
+        setError("Login failed. Please try again.");
+      }
     } finally {
       setIsLoading(false);
     }
   };
+
+  // Show loading spinner while checking existing session
+  if (checkingSession) {
+    return (
+      <div
+        className="min-h-screen flex items-center justify-center"
+        style={{
+          background: "linear-gradient(135deg, #081C15 0%, #1B4332 30%, #2D6A4F 60%, #40916C 100%)",
+        }}
+      >
+        <Loader2 className="h-8 w-8 animate-spin text-brand-spring" />
+      </div>
+    );
+  }
 
   return (
     <div
