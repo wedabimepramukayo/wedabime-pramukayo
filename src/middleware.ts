@@ -6,16 +6,15 @@
  * Full authentication (token decryption + role check) is done
  * server-side in each admin page and API route via getServerSession().
  *
- * Why not decrypt JWE here?
- * - NextAuth v4 encrypts JWTs with JWE (dir + A256GCM)
- * - jose library adds significant bundle size and bundling complexity
- * - Cloudflare Workers have strict 3MiB limits
- * - The real auth check happens in API routes and server components
- *
  * This middleware provides:
  * 1. UX: Redirect unauthenticated users to login (instead of 401)
  * 2. Performance: Skip rendering admin pages for anonymous users
  * 3. Security: First line of defense (real auth is server-side)
+ *
+ * Cookie detection uses THREE methods (ordered by reliability):
+ * 1. request.cookies.get() — Next.js cookie API
+ * 2. Raw Cookie header parsing — fallback for Workers edge runtime
+ * 3. request.headers.get('cookie') string search — last resort
  */
 
 import { NextResponse } from "next/server";
@@ -26,14 +25,28 @@ export const runtime = "experimental-edge";
 
 /**
  * Check if a NextAuth session cookie exists.
- * We check both the standard and __Secure- prefixed variants.
- * The __Secure- prefix is used when the site is served over HTTPS.
+ * Uses multiple detection methods for Cloudflare Workers compatibility.
  */
 function hasSessionCookie(request: NextRequest): boolean {
-  return !!(
+  // Method 1: Next.js cookie API
+  const cookieViaAPI =
     request.cookies.get("next-auth.session-token")?.value ||
-    request.cookies.get("__Secure-next-auth.session-token")?.value
-  );
+    request.cookies.get("__Secure-next-auth.session-token")?.value;
+
+  if (cookieViaAPI) return true;
+
+  // Method 2: Parse raw Cookie header (most reliable on Workers)
+  const rawCookieHeader = request.headers.get("cookie") || "";
+
+  if (!rawCookieHeader) return false;
+
+  // Check if any session token cookie exists in the raw header
+  // Match both standard and __Secure- prefixed cookie names
+  const hasToken =
+    rawCookieHeader.includes("next-auth.session-token=") ||
+    rawCookieHeader.includes("__Secure-next-auth.session-token=");
+
+  return hasToken;
 }
 
 export function middleware(request: NextRequest) {
