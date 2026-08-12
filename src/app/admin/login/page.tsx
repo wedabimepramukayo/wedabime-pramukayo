@@ -127,7 +127,11 @@ export default function AdminLoginPage() {
 
       if (result?.ok) {
         // NextAuth login succeeded — session cookie is set
-        // Set client-side auth flag cookie for middleware detection
+        // Set auth flag cookie via server-side endpoint (more reliable than document.cookie)
+        try {
+          await fetch("/api/admin/auth-flag", { method: "POST" });
+        } catch {}
+        // Also set client-side as backup
         setAuthFlagCookie();
         setTimeout(() => {
           window.location.replace(callbackUrl);
