@@ -2,14 +2,13 @@
  * Admin Panel Layout — Wedabime Pramukayo CMS
  * Protected layout with Sidebar navigation + Header
  *
- * Auth protection approach:
- * - Middleware lets all /admin/* requests through (cookie detection
- *   is unreliable on Cloudflare Workers)
+ * Auth protection approach (Cloudflare Workers compatible):
+ * - Middleware is minimal (pass-through) because cookie detection
+ *   on Workers is unreliable
  * - This layout checks getServerSession() server-side
- * - No session → render children without sidebar (login/register pages)
- * - Has session → render full admin layout with sidebar + header
- * - Individual admin pages (dashboard, etc.) do client-side
- *   useSession() check and redirect if unauthenticated
+ * - No session + non-login page: client-side auth guard redirects
+ * - Login/register pages: rendered without sidebar (children only)
+ * - Authenticated: render full admin layout with sidebar + header
  */
 
 // Force dynamic rendering — layout uses getServerSession which needs auth DB
@@ -20,6 +19,7 @@ import { authOptions } from "@/lib/auth";
 import { AuthProvider } from "@/components/auth-provider";
 import { AdminSidebar } from "@/components/admin/admin-sidebar";
 import { AdminHeader } from "@/components/admin/admin-header";
+import { AdminAuthGuard } from "@/components/admin/admin-auth-guard";
 
 export default async function AdminLayout({
   children,
@@ -28,12 +28,14 @@ export default async function AdminLayout({
 }) {
   const session = await getServerSession(authOptions);
 
-  // No session: render children without sidebar.
-  // - Login/register pages work fine without sidebar
-  // - Other admin pages' client components will detect
-  //   no session and redirect to /admin/login
+  // No session: render with auth guard (client-side redirect for protected pages)
+  // Login/register pages work without the auth guard since they're public
   if (!session) {
-    return <>{children}</>;
+    return (
+      <AuthProvider>
+        <AdminAuthGuard>{children}</AdminAuthGuard>
+      </AuthProvider>
+    );
   }
 
   // Authenticated: render full admin layout with sidebar + header
