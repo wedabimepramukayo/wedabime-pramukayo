@@ -67,7 +67,7 @@ jobs:
           ")
           if [ -n "$VERSION_ID" ]; then
             echo "Promoting version $VERSION_ID to 100% traffic..."
-            npx wrangler versions deploy "$VERSION_ID" --traffic-percent 100 || true
+            npx wrangler versions deploy "${VERSION_ID}@100" || true
           else
             echo "Could not get version ID, skipping promotion"
           fi
