@@ -141,16 +141,37 @@ export const authOptions: NextAuthOptions = {
     },
 
     async redirect({ url, baseUrl }) {
-      // After login, redirect to admin dashboard
-      if (url.startsWith(baseUrl)) {
-        // If returning from a protected page, go there
-        const callbackUrl = new URL(url).searchParams.get("callbackUrl");
-        if (callbackUrl) return callbackUrl;
-        return `${baseUrl}/admin/dashboard`;
+      // CRITICAL FIX for Cloudflare Workers:
+      // NextAuth generates URLs with the workers.dev internal domain.
+      // We must override ALL redirect URLs to use the custom domain.
+      const siteUrl = process.env.NEXTAUTH_URL || process.env.NEXT_PUBLIC_SITE_URL || baseUrl;
+
+      // Parse the URL to extract the path and query params
+      let targetPath = "/admin/dashboard";
+      try {
+        const parsedUrl = new URL(url);
+        targetPath = parsedUrl.pathname + parsedUrl.search;
+      } catch {
+        // url is a relative path
+        targetPath = url;
       }
-      // If callback URL is relative
-      if (url.startsWith("/")) return `${baseUrl}${url}`;
-      return `${baseUrl}/admin/dashboard`;
+
+      // Extract callbackUrl if present
+      try {
+        const callbackUrl = new URL(url).searchParams.get("callbackUrl");
+        if (callbackUrl) {
+          // callbackUrl might also have workers.dev domain, fix it
+          try {
+            const parsedCallback = new URL(callbackUrl);
+            targetPath = parsedCallback.pathname + parsedCallback.search;
+          } catch {
+            targetPath = callbackUrl;
+          }
+        }
+      } catch {}
+
+      // Always use the site URL (custom domain), never workers.dev
+      return `${siteUrl}${targetPath}`;
     },
   },
 
