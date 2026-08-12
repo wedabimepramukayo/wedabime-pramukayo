@@ -144,30 +144,27 @@ export async function POST(request: NextRequest) {
       ? "__Secure-next-auth.session-token"
       : "next-auth.session-token";
 
+    // Auth flag cookie name (non-HttpOnly, readable by middleware)
+    const authFlagName = isHttps ? "__Secure-wpm_auth" : "wpm_auth";
+
     const expires = new Date(Date.now() + maxAge * 1000);
-    const cookieParts = [
-      `${cookieName}=${sessionToken}`,
-      `Path=/`,
-      `Expires=${expires.toUTCString()}`,
-      `HttpOnly`,
-      `SameSite=Lax`,
-    ];
+    const cookieOptions = {
+      path: "/",
+      expires,
+      sameSite: "lax" as const,
+      secure: isHttps,
+      httpOnly: true,
+    };
 
-    if (isHttps) {
-      cookieParts.push("Secure");
-    }
+    const authFlagOptions = {
+      path: "/",
+      expires,
+      sameSite: "lax" as const,
+      secure: isHttps,
+      httpOnly: false,
+    };
 
-    const setCookieHeader = cookieParts.join("; ");
-
-    // Also set a SIMPLE non-HttpOnly cookie that the middleware CAN read.
-    // The NextAuth session cookie is HttpOnly and the middleware can't
-    // reliably detect it on Cloudflare Workers. This simple cookie is
-    // just a flag — real auth is verified server-side via getServerSession().
-    const authFlagCookie = isHttps
-      ? `__Secure-wpm_auth=1; Path=/; Expires=${expires.toUTCString()}; SameSite=Lax; Secure`
-      : `wpm_auth=1; Path=/; Expires=${expires.toUTCString()}; SameSite=Lax`;
-
-    // Return success response with Set-Cookie headers
+    // Return success response
     const response = NextResponse.json(
       {
         success: true,
@@ -181,8 +178,10 @@ export async function POST(request: NextRequest) {
       { status: 200 }
     );
 
-    // Set both cookies (session token + auth> auth flag)
-    response.headers.set("Set-Cookie", `${setCookieHeader}, ${authFlagCookie}`);
+    // Set both cookies using NextResponse cookies API
+    // This properly creates separate Set-Cookie headers (no comma-join bug)
+    response.cookies.set(cookieName, sessionToken, cookieOptions);
+    response.cookies.set(authFlagName, "1", authFlagOptions);
 
     return response;
   } catch (error: any) {

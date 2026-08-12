@@ -2,10 +2,10 @@
  * Middleware — Wedabime Pramukayo CMS
  * Edge-compatible for Cloudflare Workers
  *
- * Checks for a simple auth flag cookie (wpm_auth) to determine
- * if the user is logged in. The actual NextAuth session cookie
- * is HttpOnly and can't be reliably read in the middleware on
- * Cloudflare Workers, so we use a separate non-HttpOnly flag cookie.
+ * Checks for auth cookies to determine if user is logged in.
+ * Multiple detection methods for maximum reliability:
+ * 1. Custom auth flag cookie (wpm_auth) — non-HttpOnly, set by custom login
+ * 2. NextAuth session token cookie — HttpOnly, set by both NextAuth and custom login
  *
  * Real auth verification (JWT decryption + role check) happens
  * server-side in the admin layout via getServerSession().
@@ -18,20 +18,33 @@ import type { NextRequest } from "next/server";
 export const runtime = "experimental-edge";
 
 /**
- * Check if the auth flag cookie exists.
+ * Check if the user has any auth cookie set.
+ * Checks both the custom auth flag and the NextAuth session token.
  * Uses the raw Cookie header for maximum compatibility on Workers.
  */
 function hasAuthCookie(request: NextRequest): boolean {
-  // Try Next.js cookie API first
-  const viaAPI =
+  // Try Next.js cookie API first — check custom auth flag
+  const authFlag =
     request.cookies.get("wpm_auth")?.value ||
     request.cookies.get("__Secure-wpm_auth")?.value;
 
-  if (viaAPI) return true;
+  if (authFlag) return true;
 
-  // Fallback: check raw Cookie header
+  // Check NextAuth session token cookie (set by both NextAuth and custom login)
+  const sessionToken =
+    request.cookies.get("next-auth.session-token")?.value ||
+    request.cookies.get("__Secure-next-auth.session-token")?.value;
+
+  if (sessionToken) return true;
+
+  // Fallback: check raw Cookie header (most reliable on Workers)
   const rawCookie = request.headers.get("cookie") || "";
-  return rawCookie.includes("wpm_auth=") || rawCookie.includes("__Secure-wpm_auth=");
+  return (
+    rawCookie.includes("wpm_auth=") ||
+    rawCookie.includes("__Secure-wpm_auth=") ||
+    rawCookie.includes("next-auth.session-token=") ||
+    rawCookie.includes("__Secure-next-auth.session-token=")
+  );
 }
 
 export function middleware(request: NextRequest) {
