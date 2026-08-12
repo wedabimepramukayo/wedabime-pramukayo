@@ -17,6 +17,12 @@
   "images": {
     "binding": "IMAGES"
   },
+  "routes": [
+    {
+      "pattern": "wedabimepramukayo.site/*",
+      "custom_domain": true
+    }
+  ],
   "vars": {
     "NEXTAUTH_URL": "https://wedabimepramukayo.site",
     "NEXT_PUBLIC_SITE_URL": "https://wedabimepramukayo.site"
