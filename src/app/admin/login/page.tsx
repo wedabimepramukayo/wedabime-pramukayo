@@ -61,10 +61,19 @@ export default function AdminLoginPage() {
       .then((res) => res.json())
       .then((data) => {
         if (data?.user?.email) {
-          // Already logged in — set auth flag and redirect
+          // Already logged in — set auth flag cookie
           setAuthFlagCookie();
+          // Try to set server-side auth flag too
+          fetch("/api/admin/auth-flag", { method: "POST" }).catch(() => {});
+
+          // Try redirecting to dashboard. If middleware blocks it,
+          // the page will reload at /admin/login?callbackUrl=/admin/dashboard
+          // and we'll detect the session again and keep trying.
           const callbackUrl = params.get("callbackUrl") || "/admin/dashboard";
-          window.location.replace(callbackUrl);
+          // Use a small delay to let cookies propagate
+          setTimeout(() => {
+            window.location.replace(callbackUrl);
+          }, 500);
         } else {
           setCheckingSession(false);
         }
