@@ -51,25 +51,39 @@ jobs:
           du -sh .open-next/server-functions/default/
 
       - name: Deploy to Cloudflare Workers
-        run: npx wrangler deploy
+        id: deploy
+        run: |
+          npx wrangler deploy 2>&1 | tee /tmp/wrangler-deploy.log
+          # Extract the Version ID from the deploy output
+          VERSION_ID=$(grep -oP 'Current Version ID: \K[^ ]+' /tmp/wrangler-deploy.log || true)
+          echo "version_id=$VERSION_ID" >> $GITHUB_OUTPUT
+          echo "Deployed version: $VERSION_ID"
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
 
       - name: Promote latest version to 100% traffic
         run: |
-          # Get the latest version ID
-          VERSION_ID=$(npx wrangler versions list --json 2>/dev/null | python3 -c "
-          import json, sys
-          data = json.load(sys.stdin)
-          if data:
-            print(data[0]['id'])
-          ")
+          VERSION_ID="${{ steps.deploy.outputs.version_id }}"
           if [ -n "$VERSION_ID" ]; then
             echo "Promoting version $VERSION_ID to 100% traffic..."
             npx wrangler versions deploy "${VERSION_ID}@100" || true
           else
-            echo "Could not get version ID, skipping promotion"
+            echo "Could not get version ID from deploy step, trying list..."
+            VERSION_ID=$(npx wrangler versions list --json 2>/dev/null | python3 -c "
+            import json, sys
+            data = json.load(sys.stdin)
+            if data:
+              # Sort by creation time, get the most recent
+              sorted_data = sorted(data, key=lambda x: x.get('created_at', ''), reverse=True)
+              print(sorted_data[0]['id'])
+            ")
+            if [ -n "$VERSION_ID" ]; then
+              echo "Promoting version $VERSION_ID to 100% traffic..."
+              npx wrangler versions deploy "${VERSION_ID}@100" || true
+            else
+              echo "Could not get version ID, skipping promotion"
+            fi
           fi
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
