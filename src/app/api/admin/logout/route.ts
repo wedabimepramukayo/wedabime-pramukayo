@@ -1,16 +1,16 @@
 /**
  * Custom Admin Logout API — Cloudflare Workers Compatible
  *
- * Clears the NextAuth session cookie and returns success.
+ * Clears the NextAuth session cookie and auth flag cookie.
  * Bypasses NextAuth's signOut() which has the workers.dev domain issue.
+ * Uses NextResponse.cookies API for proper multi-cookie support.
  */
 
 import { NextRequest, NextResponse } from "next/server";
 
 export async function POST(request: NextRequest) {
-  const requestUrl = new URL(request.url);
-  const isHttps = requestUrl.protocol === "https:" ||
-                  request.headers.get("x-forwarded-proto") === "https";
+  const isHttps = request.headers.get("x-forwarded-proto") === "https" ||
+                  new URL(request.url).protocol === "https:";
 
   // Build cookie names
   const sessionCookieName = isHttps
@@ -25,17 +25,35 @@ export async function POST(request: NextRequest) {
     ? "__Secure-wpm_auth"
     : "wpm_auth";
 
-  // Set cookies to expire immediately (clear them)
-  const clearCookies = [
-    `${sessionCookieName}=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT; HttpOnly; SameSite=Lax${isHttps ? "; Secure" : ""}`,
-    `${callbackCookieName}=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT; HttpOnly; SameSite=Lax${isHttps ? "; Secure" : ""}`,
-    `${authFlagCookieName}=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax${isHttps ? "; Secure" : ""}`,
-  ];
+  const expired = new Date(0); // Thu, 01 Jan 1970 00:00:00 GMT
 
   const response = NextResponse.json({ success: true }, { status: 200 });
 
-  // Set multiple Set-Cookie headers
-  response.headers.set("Set-Cookie", clearCookies.join(", "));
+  // Clear each cookie using NextResponse cookies API
+  // This properly creates separate Set-Cookie headers
+  response.cookies.set(sessionCookieName, "", {
+    path: "/",
+    expires: expired,
+    sameSite: "lax",
+    secure: isHttps,
+    httpOnly: true,
+  });
+
+  response.cookies.set(callbackCookieName, "", {
+    path: "/",
+    expires: expired,
+    sameSite: "lax",
+    secure: isHttps,
+    httpOnly: true,
+  });
+
+  response.cookies.set(authFlagCookieName, "", {
+    path: "/",
+    expires: expired,
+    sameSite: "lax",
+    secure: isHttps,
+    httpOnly: false,
+  });
 
   return response;
 }

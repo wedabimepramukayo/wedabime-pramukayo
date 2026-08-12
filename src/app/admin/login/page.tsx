@@ -3,15 +3,12 @@
 /**
  * Admin Login Page — Wedabime Pramukayo CMS
  *
- * Uses a custom /api/admin/login endpoint instead of NextAuth's signIn()
- * to bypass the Cloudflare Workers domain mismatch issue where NextAuth
- * generates redirect URLs with the workers.dev internal domain.
- *
- * Flow:
- * 1. Check if already authenticated → redirect to dashboard/callbackUrl
- * 2. POST credentials to /api/admin/login
- * 3. Server validates, creates JWT, sets session cookie
- * 4. Client navigates to dashboard on success
+ * Login flow (with multiple fallback strategies for Workers compatibility):
+ * 1. Check if already authenticated → redirect to dashboard
+ * 2. Try custom /api/admin/login endpoint (sets both cookies)
+ * 3. If custom fails, try NextAuth signIn (sets session cookie)
+ * 4. After any successful login, set wpm_auth client-side cookie for middleware
+ * 5. Navigate to dashboard/callbackUrl
  */
 
 import { useState, useEffect } from "react";
@@ -23,6 +20,26 @@ import { Card, CardContent, CardHeader, CardDescription } from "@/components/ui/
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { TreePine, Shield, Eye, EyeOff, Loader2, Leaf, CheckCircle2 } from "lucide-react";
 
+/**
+ * Set the auth flag cookie client-side (non-HttpOnly, readable by middleware).
+ * This ensures the middleware can detect authenticated users even when
+ * the server-side Set-Cookie mechanism fails or NextAuth doesn't set it.
+ */
+function setAuthFlagCookie() {
+  const maxAge = 24 * 60 * 60; // 24 hours
+  const isSecure = window.location.protocol === "https:";
+  const cookieName = isSecure ? "__Secure-wpm_auth" : "wpm_auth";
+  const expires = new Date(Date.now() + maxAge * 1000).toUTCString();
+  const parts = [
+    `${cookieName}=1`,
+    `Path=/`,
+    `Expires=${expires}`,
+    `SameSite=Lax`,
+  ];
+  if (isSecure) parts.push("Secure");
+  document.cookie = parts.join("; ");
+}
+
 export default function AdminLoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -33,7 +50,6 @@ export default function AdminLoginPage() {
   const [checkingSession, setCheckingSession] = useState(true);
 
   // On mount, check if user is already authenticated
-  // If so, redirect to the callback URL or dashboard
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     if (params.get("registered") === "true") {
@@ -45,7 +61,8 @@ export default function AdminLoginPage() {
       .then((res) => res.json())
       .then((data) => {
         if (data?.user?.email) {
-          // Already logged in — redirect to callback URL or dashboard
+          // Already logged in — set auth flag and redirect
+          setAuthFlagCookie();
           const callbackUrl = params.get("callbackUrl") || "/admin/dashboard";
           window.location.replace(callbackUrl);
         } else {
@@ -62,6 +79,10 @@ export default function AdminLoginPage() {
     setError("");
     setIsLoading(true);
 
+    const params = new URLSearchParams(window.location.search);
+    const callbackUrl = params.get("callbackUrl") || "/admin/dashboard";
+
+    // Strategy 1: Try custom login endpoint
     try {
       const response = await fetch("/api/admin/login", {
         method: "POST",
@@ -69,47 +90,60 @@ export default function AdminLoginPage() {
         body: JSON.stringify({ email, password }),
       });
 
-      const data = await response.json();
+      // Only parse JSON if response is OK (custom endpoint returns JSON)
+      if (response.ok) {
+        const data = await response.json();
+        if (data.success) {
+          // Custom login succeeded — cookies are set by server
+          // Also set client-side auth flag as backup
+          setAuthFlagCookie();
+          setTimeout(() => {
+            window.location.replace(callbackUrl);
+          }, 300);
+          return;
+        }
+        // Custom endpoint returned an error
+        setError(data.error || "Invalid email or password.");
+        setIsLoading(false);
+        return;
+      }
+      // Custom endpoint returned non-200 (probably 404 on Workers)
+      // Fall through to NextAuth strategy
+      console.log("Custom login endpoint not available, trying NextAuth...");
+    } catch (err) {
+      // Custom endpoint failed (network error, JSON parse error, etc.)
+      // Fall through to NextAuth strategy
+      console.log("Custom login failed, trying NextAuth fallback:", err);
+    }
 
-      if (!response.ok || !data.success) {
-        setError(data.error || "Invalid email or password. Please try again.");
+    // Strategy 2: Use NextAuth signIn
+    try {
+      const { signIn } = await import("next-auth/react");
+      const result = await signIn("credentials", {
+        email,
+        password,
+        redirect: false,
+      });
+
+      if (result?.ok) {
+        // NextAuth login succeeded — session cookie is set
+        // Set client-side auth flag cookie for middleware detection
+        setAuthFlagCookie();
+        setTimeout(() => {
+          window.location.replace(callbackUrl);
+        }, 500);
         return;
       }
 
-      // Login successful — session cookie is now set
-      // Get callback URL from current URL params, or default to dashboard
-      const params = new URLSearchParams(window.location.search);
-      const callbackUrl = params.get("callbackUrl") || "/admin/dashboard";
-
-      // Navigate with a full page reload to ensure session is picked up
-      setTimeout(() => {
-        window.location.replace(callbackUrl);
-      }, 300);
-    } catch (err) {
-      // If the custom login endpoint fails (e.g., route not deployed yet),
-      // fall back to NextAuth signIn as a last resort
-      console.error("Custom login failed, trying NextAuth fallback:", err);
-
-      try {
-        const { signIn } = await import("next-auth/react");
-        const result = await signIn("credentials", {
-          email,
-          password,
-          redirect: false,
-        });
-
-        if (result?.ok) {
-          const params = new URLSearchParams(window.location.search);
-          const callbackUrl = params.get("callbackUrl") || "/admin/dashboard";
-          setTimeout(() => {
-            window.location.replace(callbackUrl);
-          }, 500);
-        } else {
-          setError("Invalid email or password. Please try again.");
-        }
-      } catch (fallbackErr) {
+      // NextAuth returned an error
+      if (result?.error) {
+        setError("Invalid email or password. Please try again.");
+      } else {
         setError("Login failed. Please try again.");
       }
+    } catch (fallbackErr) {
+      console.error("NextAuth login also failed:", fallbackErr);
+      setError("Login failed. Please try again.");
     } finally {
       setIsLoading(false);
     }
