@@ -1,31 +1,24 @@
 /**
  * Middleware — Wedabime Pramukayo CMS
- * Edge-compatible for Cloudflare Workers
  *
- * MINIMAL middleware — cookie detection on Cloudflare Workers is
- * unreliable, so we don't enforce auth here. Instead:
- * - Auth protection is handled server-side in the admin layout
- *   via getServerSession()
- * - Client-side pages use useSession() for redirects
+ * DISABLED: This middleware is intentionally a no-op.
  *
- * This middleware only handles:
- * - Redirecting logged-in users away from login/register pages
- *   (best-effort, non-blocking)
+ * Auth protection is handled by:
+ * 1. Server-side: admin layout uses getServerSession()
+ * 2. Client-side: AdminAuthGuard component uses useSession()
+ *
+ * Cookie detection in Cloudflare Workers middleware is unreliable,
+ * so we don't use middleware for auth protection.
  */
 
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
-// Force Edge runtime for Cloudflare Workers compatibility
-export const runtime = "experimental-edge";
-
 export function middleware(request: NextRequest) {
-  // All /admin/* routes pass through.
-  // Auth is enforced server-side by the admin layout (getServerSession)
-  // and client-side by individual pages (useSession).
   return NextResponse.next();
 }
 
+// Empty matcher — middleware never runs
 export const config = {
-  matcher: ["/admin/:path*"],
+  matcher: [],
 };
